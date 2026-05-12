@@ -134,21 +134,32 @@ type bookingInfo struct {
 	Price         string `json:"price"`
 }
 
+type workspaceCard struct {
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	Category     string `json:"category"`
+	LocationID   uint   `json:"location_id"`
+	LocationName string `json:"location_name"`
+	Capacity     int    `json:"capacity"`
+}
+
 type chatResponse struct {
-	Reply   string       `json:"reply"`
-	Action  string       `json:"action,omitempty"`
-	Booking *bookingInfo `json:"booking,omitempty"`
+	Reply      string          `json:"reply"`
+	Action     string          `json:"action,omitempty"`
+	Booking    *bookingInfo    `json:"booking,omitempty"`
+	Workspaces []workspaceCard `json:"workspaces,omitempty"`
 }
 
 // --- Структура для парсинга ответа Gemini ---
 type geminiAction struct {
-	Action      string `json:"action"`
-	Reply       string `json:"reply"`
-	WorkspaceID uint   `json:"workspace_id,omitempty"`
-	TariffID    uint   `json:"tariff_id,omitempty"`
-	Date        string `json:"date,omitempty"`
-	TimeFrom    string `json:"time_from,omitempty"`
-	TimeTo      string `json:"time_to,omitempty"`
+	Action       string `json:"action"`
+	Reply        string `json:"reply"`
+	WorkspaceID  uint   `json:"workspace_id,omitempty"`
+	TariffID     uint   `json:"tariff_id,omitempty"`
+	Date         string `json:"date,omitempty"`
+	TimeFrom     string `json:"time_from,omitempty"`
+	TimeTo       string `json:"time_to,omitempty"`
+	WorkspaceIDs []uint `json:"workspace_ids,omitempty"`
 }
 
 // tryExtractUserID — опциональная авторизация: пытаемся достать user_id из куки,
@@ -264,7 +275,18 @@ func (h *ChatHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 6. Если загрузка на запрошенный день >75%%, предупреди о повышении цены на 10-20%%. Если <45%% — предложи скидку.
 7. Не здоровайся в ответах — сразу переходи к сути.
 8. Всегда используй workspace_id и tariff_id из списков выше, НЕ выдумывай ID.
-9. Если пользователь упоминает локацию свободной формой (улица, район, название коворкинга — например, "Тверская", "на Невском", "в эко-коворкинге"), сопоставь её со списком локаций выше по названию или адресу и используй соответствующий ID. Переспрашивай только если совпадений нет или их несколько неоднозначных.`, todayStr, weekdayRu, authStatus, formattedWorkload, locationsInfo, workspacesInfo, tariffsInfo)
+9. Если пользователь упоминает локацию свободной формой (улица, район, название коворкинга — например, "Тверская", "на Невском", "в эко-коворкинге"), сопоставь её со списком локаций выше по названию или адресу и используй соответствующий ID. Переспрашивай только если совпадений нет или их несколько неоднозначных.
+
+10. Если пользователь хочет ПОСМОТРЕТЬ список свободных/доступных мест (например: «покажи свободные места», «какие места есть на Тверской», «что свободно для встречи на 6 человек», «список переговорок»), используй:
+{
+  "action": "list_workspaces",
+  "reply": "Краткий комментарий перед списком (1-2 предложения, без перечисления мест списком — карточки покажет интерфейс)",
+  "workspace_ids": [1, 5, 12]
+}
+- Включай в workspace_ids только подходящие по запросу пользователя места из списка выше.
+- Не более 12 ID за раз.
+- В поле reply НЕ дублируй сами места списком/перечислением — фронт сам отрисует интерактивные карточки. Достаточно фразы вроде «Вот подходящие варианты, нажмите на карточку, чтобы забронировать».
+- Если подходящих мест нет — используй обычный action "chat" и объясни, почему.`, todayStr, weekdayRu, authStatus, formattedWorkload, locationsInfo, workspacesInfo, tariffsInfo)
 
 	// Формируем историю сообщений для контекста
 	var conversationParts []string
@@ -315,12 +337,68 @@ func (h *ChatHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 		res := chatResponse{Reply: action.Reply, Action: "need_auth"}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(res)
+	case "list_workspaces":
+		h.handleListWorkspacesAction(w, action)
 	default:
 		// Просто чат
 		res := chatResponse{Reply: action.Reply}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(res)
 	}
+}
+
+func (h *ChatHandler) handleListWorkspacesAction(w http.ResponseWriter, action geminiAction) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if len(action.WorkspaceIDs) == 0 {
+		json.NewEncoder(w).Encode(chatResponse{Reply: action.Reply})
+		return
+	}
+
+	workspaces, err := h.workspaceService.GetAllWorkspaces()
+	if err != nil {
+		logger.Error.Printf("Chat: failed to load workspaces for list action: %v", err)
+		json.NewEncoder(w).Encode(chatResponse{Reply: action.Reply})
+		return
+	}
+
+	byID := make(map[uint]int, len(workspaces))
+	for i, ws := range workspaces {
+		byID[ws.ID] = i
+	}
+
+	cards := make([]workspaceCard, 0, len(action.WorkspaceIDs))
+	seen := make(map[uint]bool, len(action.WorkspaceIDs))
+	for _, id := range action.WorkspaceIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		idx, ok := byID[id]
+		if !ok {
+			continue
+		}
+		ws := workspaces[idx]
+		cards = append(cards, workspaceCard{
+			ID:           ws.ID,
+			Name:         ws.NameOrNumber,
+			Category:     ws.Category.Name,
+			LocationID:   ws.LocationID,
+			LocationName: ws.Location.Name,
+			Capacity:     ws.Capacity,
+		})
+	}
+
+	if len(cards) == 0 {
+		json.NewEncoder(w).Encode(chatResponse{Reply: action.Reply})
+		return
+	}
+
+	json.NewEncoder(w).Encode(chatResponse{
+		Reply:      action.Reply,
+		Action:     "list_workspaces",
+		Workspaces: cards,
+	})
 }
 
 func (h *ChatHandler) handleBookAction(w http.ResponseWriter, r *http.Request, userID uint, action geminiAction) {

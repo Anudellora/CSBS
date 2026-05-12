@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import BookingForm from '../components/booking/BookingForm';
 import BookingMap from '../components/booking/BookingMap';
 import AuthModal from '../components/AuthModal';
@@ -10,14 +11,26 @@ import './Booking.css';
 
 export default function Booking() {
     const { isLoggedIn } = useAuth();
-    const [selectedType, setSelectedType] = useState('desk');
-    const [selectedDesk, setSelectedDesk] = useState(null);
+    const routerLocation = useLocation();
+    const navigate = useNavigate();
+    // Предвыбор из ИИ-ассистента: { workspaceName, locationId, bookingType }
+    const presetFromState = routerLocation.state || null;
+    const [selectedType, setSelectedType] = useState(presetFromState?.bookingType || 'desk');
+    const [selectedDesk, setSelectedDesk] = useState(presetFromState?.workspaceName || null);
     const [tariffs, setTariffs] = useState([]);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [unavailableDesks, setUnavailableDesks] = useState([]);
     const [currentFormData, setCurrentFormData] = useState(null);
     // Ref для хранения актуальных данных формы без лишних ре-рендеров
     const formDataRef = useRef(null);
+
+    // После применения предвыбора очищаем history.state, чтобы при F5 он не «прилипал»
+    useEffect(() => {
+        if (presetFromState) {
+            navigate(routerLocation.pathname, { replace: true, state: null });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         apiService.getTariffs().then(data => setTariffs(data)).catch(console.error);
@@ -157,13 +170,14 @@ export default function Booking() {
                 )}
 
                 <div style={{ display: 'contents', opacity: isLoggedIn ? 1 : 0.4, pointerEvents: isLoggedIn ? 'auto' : 'none' }}>
-                    <BookingForm 
-                        selectedType={selectedType} 
-                        handleTypeSelect={handleTypeSelect} 
-                        selectedDesk={selectedDesk} 
-                        getPrice={getPrice} 
+                    <BookingForm
+                        selectedType={selectedType}
+                        handleTypeSelect={handleTypeSelect}
+                        selectedDesk={selectedDesk}
+                        getPrice={getPrice}
                         onSubmit={handleReservationSubmit}
                         onFormChange={handleFormChange}
+                        initialLocation={presetFromState?.locationId || ''}
                     />
                     
                     <BookingMap 

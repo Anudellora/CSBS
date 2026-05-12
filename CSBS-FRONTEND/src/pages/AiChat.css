@@ -197,6 +197,86 @@
     color: #4ade80;
 }
 
+/* Workspaces grid (интерактивные карточки в чате) */
+.workspaces-grid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.workspace-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+    background: rgba(0, 166, 192, 0.06);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all var(--transition-short);
+}
+
+.workspace-card:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    background: rgba(0, 166, 192, 0.14);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-accent);
+}
+
+.workspace-card:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.workspace-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.workspace-card-name {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #fff;
+}
+
+.workspace-card-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(0, 166, 192, 0.18);
+    color: var(--color-accent);
+    border: 1px solid rgba(0, 166, 192, 0.3);
+    white-space: nowrap;
+}
+
+.workspace-card-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.workspace-card-row svg {
+    flex-shrink: 0;
+    color: var(--color-accent);
+}
+
+.workspace-card-cta {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-accent);
+}
+
 /* Auth button in chat */
 .chat-auth-btn {
     display: inline-flex;

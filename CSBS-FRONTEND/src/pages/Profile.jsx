@@ -3,6 +3,7 @@ import {
     User, Calendar, Settings, Users, ShieldAlert,
     CreditCard, Building2, Terminal, Trash2, FileText
 } from 'lucide-react';
+import { maskEmail, maskPhone } from '../utils/formatters';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
@@ -20,21 +21,6 @@ import SystemAuditLogs from '../components/profile/SystemAuditLogs';
 
 /* ── helpers ── */
 
-const maskEmail = (email) => {
-    if (!email || !email.includes('@')) return email;
-    const [local, domain] = email.split('@');
-    if (local.length <= 4) return local + '@' + domain;
-    return local.substring(0, 3) + '***' + local.slice(-1) + '@' + domain;
-};
-
-const maskPhone = (phone) => {
-    if (!phone) return phone;
-    const clean = phone.replace(/\D/g, '');
-    if (clean.length < 5) return phone;
-    const front = clean.substring(0, 3);
-    const back = clean.slice(-1);
-    return `+${front[0]} (${front.substring(1, 4)}*) ***-**-*${back}`;
-};
 
 const roleNames = {
     'client':   'Зарегистрированный пользователь',

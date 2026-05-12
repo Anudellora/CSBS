@@ -1,8 +1,50 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, User, Loader2, CalendarCheck, Clock, MapPin, LogIn } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bot, Send, User, Loader2, CalendarCheck, Clock, MapPin, LogIn, Lock, Users, Building2 } from 'lucide-react';
 import { apiService } from '../services/api';
+import { categoryToBookingType } from '../utils/formatters';
 import AuthModal from '../components/AuthModal';
+import { useAuth } from '../context/AuthContext';
 import './AiChat.css';
+
+
+function WorkspacesGrid({ workspaces, onPick, disabled }) {
+    if (!workspaces || workspaces.length === 0) return null;
+    return (
+        <div className="workspaces-grid">
+            {workspaces.map((ws) => (
+                <button
+                    key={ws.id}
+                    type="button"
+                    className="workspace-card"
+                    onClick={() => onPick(ws)}
+                    disabled={disabled}
+                    title={`Забронировать ${ws.name}`}
+                >
+                    <div className="workspace-card-header">
+                        <span className="workspace-card-name">{ws.name}</span>
+                        {ws.category && (
+                            <span className="workspace-card-badge">{ws.category}</span>
+                        )}
+                    </div>
+                    {ws.location_name && (
+                        <div className="workspace-card-row">
+                            <Building2 size={14} />
+                            <span>{ws.location_name}</span>
+                        </div>
+                    )}
+                    {ws.capacity > 0 && (
+                        <div className="workspace-card-row">
+                            <Users size={14} />
+                            <span>до {ws.capacity} чел.</span>
+                        </div>
+                    )}
+                    <span className="workspace-card-cta">Забронировать</span>
+                </button>
+            ))}
+        </div>
+    );
+}
 
 function BookingCard({ booking }) {
     return (
@@ -52,6 +94,9 @@ export default function AiChat() {
     const [isLoading, setIsLoading] = useState(false);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const messagesContainerRef = useRef(null);
+    const lastMessageRef = useRef(null);
+    const { isLoggedIn } = useAuth();
+    const navigate = useNavigate();
 
     const scrollToBottom = () => {
         const el = messagesContainerRef.current;
@@ -61,17 +106,26 @@ export default function AiChat() {
     };
 
     useEffect(() => {
-        scrollToBottom();
         sessionStorage.setItem('ai_chat_history', JSON.stringify(messages));
+
+        const lastMsg = messages[messages.length - 1];
+        // Если последнее сообщение — список карточек, прокручиваем так,
+        // чтобы его НАЧАЛО оказалось в верху видимой области (карточки видны сразу).
+        // В остальных случаях — обычный скролл к низу.
+        if (lastMsg?.action === 'list_workspaces' && lastMessageRef.current) {
+            lastMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            scrollToBottom();
+        }
     }, [messages, isLoading]);
 
-    const handleSend = async () => {
-        if (!input.trim() || isLoading) return;
+    const handleSend = async (overrideMessage) => {
+        const userMessage = (typeof overrideMessage === 'string' ? overrideMessage : input).trim();
+        if (!userMessage || isLoading || !isLoggedIn) return;
 
-        const userMessage = input;
         const newMessages = [...messages, { role: 'user', content: userMessage }];
         setMessages(newMessages);
-        setInput('');
+        if (typeof overrideMessage !== 'string') setInput('');
         setIsLoading(true);
 
         try {
@@ -88,6 +142,7 @@ export default function AiChat() {
                 content: data.reply,
                 action: data.action || null,
                 booking: data.booking || null,
+                workspaces: data.workspaces || null,
             };
 
             setMessages(msgs => [...msgs, aiMessage]);
@@ -100,6 +155,18 @@ export default function AiChat() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handlePickWorkspace = (ws) => {
+        // Переходим на страницу бронирования с предзаполнением места и локации,
+        // чтобы пользователь мог выбрать дату/время и подтвердить.
+        navigate('/booking', {
+            state: {
+                workspaceName: ws.name,
+                locationId: ws.location_id ? String(ws.location_id) : '',
+                bookingType: categoryToBookingType(ws.category),
+            },
+        });
     };
 
     const handleKeyDown = (e) => {
@@ -118,10 +185,45 @@ export default function AiChat() {
                 </div>
             </div>
 
-            <div className="chat-container glass-panel">
+            <div className="chat-container glass-panel" style={{ position: 'relative' }}>
+                {!isLoggedIn && (
+                    <div
+                        className="auth-overlay"
+                        style={{
+                            position: 'absolute',
+                            top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundColor: 'rgba(10, 14, 23, 0.75)',
+                            backdropFilter: 'blur(4px)',
+                            zIndex: 50,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            borderRadius: '16px',
+                            color: '#fff',
+                            textAlign: 'center',
+                            padding: '2rem',
+                        }}
+                    >
+                        <Lock size={64} style={{ marginBottom: '1.5rem', color: 'var(--color-accent)' }} />
+                        <h3 style={{ fontSize: '1.75rem', marginBottom: '1rem', fontWeight: 600 }}>Требуется авторизация</h3>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem', marginBottom: '2rem', maxWidth: '400px' }}>
+                            Войдите или зарегистрируйтесь, чтобы общаться с ИИ-ассистентом и бронировать места прямо в чате
+                        </p>
+                        <button className="btn btn-primary btn-lg" onClick={() => setIsAuthModalOpen(true)}>
+                            Вход/Регистрация
+                        </button>
+                    </div>
+                )}
+
+                <div style={{ display: 'contents', opacity: isLoggedIn ? 1 : 0.4, pointerEvents: isLoggedIn ? 'auto' : 'none' }}>
                 <div className="chat-messages" ref={messagesContainerRef}>
                     {messages.map((msg, idx) => (
-                        <div key={idx} className={`message-wrapper ${msg.role}`}>
+                        <div
+                            key={idx}
+                            ref={idx === messages.length - 1 ? lastMessageRef : null}
+                            className={`message-wrapper ${msg.role}`}
+                        >
                             <div className="message-bubble">
                                 {msg.role === 'ai' && <Bot size={16} className="message-icon" />}
                                 {msg.role === 'user' && <User size={16} className="message-icon" />}
@@ -131,6 +233,15 @@ export default function AiChat() {
                                     {/* Карточка бронирования */}
                                     {msg.action === 'booked' && msg.booking && (
                                         <BookingCard booking={msg.booking} />
+                                    )}
+
+                                    {/* Список доступных мест */}
+                                    {msg.action === 'list_workspaces' && msg.workspaces && (
+                                        <WorkspacesGrid
+                                            workspaces={msg.workspaces}
+                                            onPick={handlePickWorkspace}
+                                            disabled={isLoading || !isLoggedIn}
+                                        />
                                     )}
 
                                     {/* Кнопка авторизации */}
@@ -165,11 +276,12 @@ export default function AiChat() {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        disabled={isLoading}
+                        disabled={isLoading || !isLoggedIn}
                     />
-                    <button className="btn-send" onClick={handleSend} disabled={isLoading}>
+                    <button className="btn-send" onClick={handleSend} disabled={isLoading || !isLoggedIn}>
                         <Send size={20} />
                     </button>
+                </div>
                 </div>
             </div>
 

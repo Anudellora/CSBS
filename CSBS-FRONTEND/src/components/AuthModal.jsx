@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, Eye, EyeOff, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { validateEmail, validatePassword } from '../utils/validators';
 import './AuthModal.css';
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
@@ -41,24 +42,13 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
     const validateField = (fieldName, value, currentFormData = formData) => {
         let errorMsg = '';
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
         if (fieldName === 'email') {
-            if (!value) errorMsg = "Email обязателен";
-            else if (!emailRegex.test(value)) errorMsg = "Введите корректный email";
+            errorMsg = validateEmail(value);
         }
 
         if (fieldName === 'password') {
-            if (!value) errorMsg = "Пароль обязателен";
-            else if (mode === 'register') {
-                const forbiddenChars = /[()[\]{}|\`¬¦!«£$%^&*»<>:;#~_\-+=,@]/;
-
-                if (value.length < 8) errorMsg = "Пароль должен содержать минимум 8 символов";
-                else if (forbiddenChars.test(value)) errorMsg = "Пароль содержит недопустимые спецсимволы";
-
-                else if (!/(?=.*[A-Z])/.test(value)) errorMsg = "Должна быть хотя бы одна заглавная буква";
-                else if (!/(?=.*\d)/.test(value)) errorMsg = "Должна быть хотя бы одна цифра";
-            }
+            errorMsg = validatePassword(value, mode === 'register');
         }
 
         if (mode === 'register') {

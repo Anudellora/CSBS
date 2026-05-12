@@ -4,7 +4,7 @@ import DatePicker from './DatePicker';
 import Dropdown from './Dropdown';
 import './DatePicker.css';
 
-export default function BookingForm({ selectedType, handleTypeSelect, selectedDesk, getPrice, onSubmit, onFormChange }) {
+export default function BookingForm({ selectedType, handleTypeSelect, selectedDesk, getPrice, onSubmit, onFormChange, initialLocation = '' }) {
     const isOffice = selectedType === 'office';
     const today = new Date().toISOString().split('T')[0];
 
@@ -12,7 +12,7 @@ export default function BookingForm({ selectedType, handleTypeSelect, selectedDe
     const [dateTo, setDateTo] = useState('');
     const [timeFrom, setTimeFrom] = useState('08:00');
     const [timeTo, setTimeTo] = useState('09:00');
-    const [location, setLocation] = useState('');
+    const [location, setLocation] = useState(initialLocation);
     const [tariff, setTariff] = useState('1h');
 
     const timeFromOptions = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
