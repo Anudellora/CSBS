@@ -28,7 +28,7 @@
 .booking-page-header h1 {
     font-size: 2.5rem;
     margin-bottom: 0.5rem;
-    color: #fff;
+    color: var(--color-text-strong);
 }
 
 .booking-page-header p {
@@ -69,7 +69,7 @@
     margin-bottom: 2rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--color-border);
-    color: #fff;
+    color: var(--color-text-strong);
 }
 
 .form-title-icon {
@@ -383,7 +383,7 @@
 .desk.selected-state {
     background-color: var(--color-accent);
     border: 2px solid var(--color-accent-hover);
-    color: #fff;
+    color: var(--color-text-strong);
     transform: scale(1.05);
     box-shadow: var(--shadow-accent);
 }
@@ -597,7 +597,7 @@
 }
 
 .status-badge.selected {
-    color: #fff;
+    color: var(--color-text-strong);
     background-color: var(--color-accent);
 }
 

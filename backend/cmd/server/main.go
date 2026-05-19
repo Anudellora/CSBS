@@ -6,6 +6,7 @@ import (
 	"csbs/backend/internal/models"
 	"csbs/backend/internal/repository"
 	"csbs/backend/internal/service"
+	"csbs/backend/pkg/email"
 	"csbs/backend/pkg/gemini"
 	"csbs/backend/pkg/logger"
 	"fmt"
@@ -72,7 +73,8 @@ func main() {
 	// Поднимаю сервисы (тут вся главная бизнес-логика)
 	locationService := service.NewLocationService(locationRepo)
 	workspaceService := service.NewWorkspaceService(workspaceRepo)
-	userService := service.NewUserService(userRepo, auditRepo)
+	emailSender := email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword)
+	userService := service.NewUserService(userRepo, auditRepo, emailSender, cfg.AppURL)
 	reservationService := service.NewReservationService(reservationRepo, auditRepo)
 	tariffService := service.NewTariffService(tariffRepo)
 	categoryService := service.NewCategoryService(categoryRepo)

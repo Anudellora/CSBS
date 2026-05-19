@@ -11,7 +11,7 @@
     width: 100%;
     text-align: left;
     cursor: pointer;
-    background-color: rgba(0, 0, 0, 0.2);
+    background-color: var(--color-input-bg);
     border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 0.8rem 1rem;
@@ -36,7 +36,7 @@
     display: flex;
     align-items: center;
     width: 100%;
-    background-color: rgba(0, 0, 0, 0.1);
+    background-color: var(--color-input-bg);
     border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 0.8rem 1rem;
@@ -73,7 +73,7 @@
 .dp-month-label {
     font-size: 1rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--color-text-strong);
     letter-spacing: 0.01em;
 }
 
@@ -149,7 +149,7 @@
 
 .dp-cell.dp-selected {
     background-color: var(--color-accent);
-    color: #1a1f26;
+    color: var(--color-accent-on);
     font-weight: 700;
     box-shadow: 0 0 12px rgba(0, 166, 192, 0.4);
 }

@@ -14,7 +14,12 @@ type Config struct {
 	DBPassword   string
 	DBName       string
 	ServerPort   string
-	GeminiAPIKey string // Наш новый секретный ключ
+	GeminiAPIKey string
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUser     string
+	SMTPPassword string
+	AppURL       string
 }
 
 // Load - загружает переменные из .env файла и возвращает структуру Config
@@ -33,5 +38,10 @@ func Load() *Config {
 		DBName:       os.Getenv("DB_NAME"),
 		ServerPort:   os.Getenv("SERVER_PORT"),
 		GeminiAPIKey: os.Getenv("GEMINI_API_KEY"),
+		SMTPHost:     os.Getenv("SMTP_HOST"),
+		SMTPPort:     os.Getenv("SMTP_PORT"),
+		SMTPUser:     os.Getenv("SMTP_USER"),
+		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
+		AppURL:       os.Getenv("APP_URL"),
 	}
 }

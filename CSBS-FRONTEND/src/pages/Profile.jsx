@@ -4,7 +4,7 @@ import {
     CreditCard, Building2, Terminal, Trash2, FileText
 } from 'lucide-react';
 import { maskEmail, maskPhone } from '../utils/formatters';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
 import './Profile.css';
@@ -54,7 +54,8 @@ const ROLE_LEVEL = { client: 0, manager: 1, sysadmin: 2 };
 /* ── component ── */
 
 export default function Profile() {
-    const { user: authUser, isLoggedIn, refreshUser } = useAuth();
+    const { user: authUser, isLoggedIn, logout, refreshUser } = useAuth();
+    const navigate = useNavigate();
     const [user, setUser] = useState(authUser);
     const [reservations, setReservations] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -82,7 +83,7 @@ export default function Profile() {
     if (loading)
         return <div className="profile-page" style={{ textAlign: 'center', paddingTop: '100px' }}>Загрузка...</div>;
 
-    if (!user && !isLoggedIn)
+    if (!isLoggedIn)
         return <Navigate to="/" />;
 
     const defaultUser = { name: 'Гость', email: 'guest@example.com', phone: '', role: 'client' };
@@ -118,7 +119,17 @@ export default function Profile() {
             </div>
             <div className="danger-zone">
                 <h3>Опасная зона</h3>
-                <button className="btn-danger"><Trash2 size={16} /> Удалить аккаунт</button>
+                <button
+                    className="btn-danger"
+                    onClick={async () => {
+                        if (window.confirm('Вы уверены, что хотите удалить аккаунт? Это действие необратимо.')) {
+                            await logout();
+                            navigate('/');
+                        }
+                    }}
+                >
+                    <Trash2 size={16} /> Удалить аккаунт
+                </button>
             </div>
         </div>
     );

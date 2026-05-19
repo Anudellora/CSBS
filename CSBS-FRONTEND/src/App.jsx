@@ -9,6 +9,7 @@ const Home = lazy(() => import('./pages/Home'));
 const AiChat = lazy(() => import('./pages/AiChat'));
 const Booking = lazy(() => import('./pages/Booking'));
 const Profile = lazy(() => import('./pages/Profile'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 
 function PageLoader() {
   return (
@@ -31,6 +32,7 @@ function App() {
               <Route path="/booking" element={<Booking />} />
               <Route path="/ai-assistant" element={<AiChat />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
             </Routes>
           </Suspense>
         </main>

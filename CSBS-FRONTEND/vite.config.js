@@ -13,12 +13,16 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    target: 'es2020',
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-ogl': ['ogl'],
           'vendor-icons': ['lucide-react'],
+          'vendor-gsap': ['gsap'],
         },
       },
     },

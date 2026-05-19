@@ -97,7 +97,7 @@
 .chat-input-area {
     padding: 1rem;
     border-top: 1px solid var(--color-border);
-    background: rgba(26, 31, 38, 0.8);
+    background: var(--color-bg-panel);
     display: flex;
     gap: 1rem;
     align-items: center;
@@ -105,11 +105,11 @@
 
 .chat-input {
     flex: 1;
-    background: var(--color-bg-deep);
+    background: var(--color-input-bg);
     border: 1px solid var(--color-border);
     padding: 1rem 1.5rem;
     border-radius: 999px;
-    color: #fff;
+    color: var(--color-text-main);
     font-family: inherit;
     font-size: 1rem;
     outline: none;
@@ -201,64 +201,73 @@
 .workspaces-grid {
     margin-top: 12px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 10px;
 }
 
 .workspace-card {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 12px 14px;
     border-radius: 12px;
-    border: 1px solid var(--color-border);
+    overflow: hidden;
+    border: 1px solid rgba(0, 166, 192, 0.3);
     background: rgba(0, 166, 192, 0.06);
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-    font-family: inherit;
     transition: all var(--transition-short);
 }
 
-.workspace-card:hover:not(:disabled) {
+.workspace-card:hover {
     border-color: var(--color-accent);
-    background: rgba(0, 166, 192, 0.14);
-    transform: translateY(-2px);
+    background: rgba(0, 166, 192, 0.12);
     box-shadow: var(--shadow-accent);
-}
-
-.workspace-card:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    transform: translateY(-2px);
 }
 
 .workspace-card-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
+    padding: 10px 14px;
+    background: rgba(0, 166, 192, 0.15);
+    color: var(--color-accent);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.workspace-card-header svg {
+    flex-shrink: 0;
+    color: var(--color-accent);
 }
 
 .workspace-card-name {
+    flex: 1;
     font-weight: 700;
-    font-size: 1rem;
-    color: #fff;
+    font-size: 0.95rem;
+    color: var(--color-text-strong);
 }
 
 .workspace-card-badge {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     padding: 2px 8px;
     border-radius: 999px;
     background: rgba(0, 166, 192, 0.18);
     color: var(--color-accent);
     border: 1px solid rgba(0, 166, 192, 0.3);
     white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.workspace-card-body {
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    flex: 1;
 }
 
 .workspace-card-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     font-size: 0.85rem;
     color: var(--color-text-muted);
 }
@@ -269,12 +278,29 @@
 }
 
 .workspace-card-cta {
-    margin-top: 4px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 8px 14px;
+    border: none;
+    border-top: 1px solid rgba(0, 166, 192, 0.2);
+    background: transparent;
+    color: var(--color-accent);
+    font-family: inherit;
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--color-accent);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-short);
+}
+
+.workspace-card-cta:hover:not(:disabled) {
+    background: rgba(0, 166, 192, 0.12);
+}
+
+.workspace-card-cta:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 /* Auth button in chat */

@@ -1,9 +1,10 @@
-import { useRef, useState, useCallback, lazy, Suspense } from 'react';
+import { useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { MapPin, Wifi, Coffee, Users, Printer, Clock, Star, ChevronDown, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Squares from './Squares';
 import ElectricBorder from '../components/ElectricBorder';
 import cowImg from '../assets/cow.png';
+import { useTheme } from '../context/ThemeContext';
 import { workspaces, reviews, tariffs, faqs, galleryItems } from '../constants/homeData';
 import './Home.css';
 
@@ -12,6 +13,13 @@ const CircularGallery = lazy(() => import('../components/CircularGallery/Circula
 export default function Home() {
     const [activeFaq, setActiveFaq] = useState(null);
     const heroRef = useRef(null);
+    const { isDark } = useTheme();
+
+    const squaresColors = useMemo(() => (
+        isDark
+            ? { borderColor: '#2a4a5e', vignetteColor: 'rgba(26,31,38,0.8)' }
+            : { borderColor: 'rgba(15, 25, 40, 0.18)', vignetteColor: 'rgba(244, 246, 249, 0.85)' }
+    ), [isDark]);
 
     const toggleFaq = useCallback((id) => {
         setActiveFaq(prev => (prev === id ? null : id));
@@ -23,7 +31,8 @@ export default function Home() {
                 <Squares
                     direction="diagonal"
                     speed={0.5}
-                    borderColor="#2a4a5e"
+                    borderColor={squaresColors.borderColor}
+                    vignetteColor={squaresColors.vignetteColor}
                     squareSize={44}
                     hoverFillColor="#00a6c0"
                     eventSourceRef={heroRef}
@@ -287,7 +296,7 @@ export default function Home() {
                             src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1111!2d37.6173!3d55.7558!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2z!5e0!3m2!1sru!2sru!4v1600000000000!5m2!1sru!2sru"
                             width="100%"
                             height="100%"
-                            style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) contrast(100%)' }}
+                            style={{ border: 0, filter: 'var(--map-filter)' }}
                             allowFullScreen=""
                             loading="lazy"
                             title="Карта коворкинга"

@@ -4,7 +4,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: rgba(10, 15, 20, 0.85);
+    background-color: var(--color-overlay);
     backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
@@ -79,7 +79,7 @@
 
 .auth-header h2 {
     font-size: 2rem;
-    color: #fff;
+    color: var(--color-text-strong);
     margin-bottom: 0.5rem;
 }
 
@@ -122,10 +122,10 @@
 .input-with-icon input {
     width: 100%;
     padding: 0.85rem 2.75rem; /* Padding for left icon and potential right icon */
-    background-color: rgba(0, 0, 0, 0.2);
+    background-color: var(--color-input-bg);
     border: 1px solid var(--color-border);
     border-radius: 8px;
-    color: #fff;
+    color: var(--color-text-strong);
     font-family: inherit;
     font-size: 1rem;
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -146,7 +146,8 @@
 }
 
 .input-with-icon input::placeholder {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--color-text-muted);
+    opacity: 0.6;
 }
 
 .password-toggle-btn {
@@ -164,7 +165,7 @@
 }
 
 .password-toggle-btn:hover {
-    color: #fff;
+    color: var(--color-text-strong);
 }
 
 .error-text {
@@ -185,11 +186,11 @@
 .auth-toggle-slider {
     position: relative;
     display: flex;
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: var(--color-input-bg);
     border-radius: 999px;
     padding: 6px;
     margin-bottom: 2rem;
-    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .slider-bg {
@@ -228,6 +229,21 @@
 }
 
 .slider-option.active {
-    color: #1a1f26; /* Dark text for contrast against the accent color */
+    color: var(--color-accent-on);
     font-weight: 600;
+}
+
+.auth-link-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-accent);
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    transition: opacity var(--transition-fast);
+}
+
+.auth-link-btn:hover {
+    opacity: 0.75;
 }

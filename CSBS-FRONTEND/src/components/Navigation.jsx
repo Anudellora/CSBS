@@ -1,20 +1,23 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Bot, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import cowLogo from '../assets/cow.png';
 import AuthModal from './AuthModal';
+import ThemeToggle from './ThemeToggle';
 import StaggeredMenu from './StaggeredMenu/StaggeredMenu';
 import './Navigation.css';
 
 export default function Navigation() {
     const location = useLocation();
     const { isLoggedIn, logout } = useAuth();
+    const navigate = useNavigate();
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [authMode, setAuthMode] = useState('login');
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logout();
+        navigate('/');
     };
 
     const openAuthModal = (mode) => {
@@ -37,7 +40,15 @@ export default function Navigation() {
         <nav className="navbar glass-panel">
             <div className="container nav-container">
                 <Link to="/" className="nav-logo">
-                    <img src={cowLogo} className="logo-icon neon-border" alt="Cow Logo" />
+                    <img
+                        src={cowLogo}
+                        className="logo-icon neon-border"
+                        alt="Cow Logo"
+                        width="100"
+                        height="100"
+                        decoding="async"
+                        fetchPriority="high"
+                    />
                     <span className="brand-name">COW</span>
                 </Link>
 
@@ -70,10 +81,13 @@ export default function Navigation() {
                             Вход/Регистрация
                         </button>
                     )}
+
+                    <ThemeToggle />
                 </div>
 
                 {/* Mobile navigation — StaggeredMenu burger */}
                 <div className="nav-links-mobile">
+                    <ThemeToggle className="theme-toggle-mobile" />
                     <StaggeredMenu
                         position="right"
                         colors={['#00a6c0', '#222831']}

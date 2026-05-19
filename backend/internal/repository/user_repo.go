@@ -2,6 +2,7 @@ package repository
 
 import (
 	"csbs/backend/internal/models"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -14,6 +15,9 @@ type UserRepository interface {
 	GetAll() ([]models.User, error)
 	Update(user *models.User) error
 	UpdateColumn(id uint, column string, value interface{}) error
+	SaveResetToken(id uint, token string, expiry time.Time) error
+	FindByResetToken(token string) (*models.User, error)
+	ClearResetToken(id uint) error
 }
 
 type userRepositoryImpl struct {
@@ -62,4 +66,24 @@ func (r *userRepositoryImpl) Update(user *models.User) error {
 
 func (r *userRepositoryImpl) UpdateColumn(id uint, column string, value interface{}) error {
 	return r.db.Model(&models.User{}).Where("id = ?", id).Update(column, value).Error
+}
+
+func (r *userRepositoryImpl) SaveResetToken(id uint, token string, expiry time.Time) error {
+	return r.db.Model(&models.User{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"reset_token":        token,
+		"reset_token_expiry": expiry,
+	}).Error
+}
+
+func (r *userRepositoryImpl) FindByResetToken(token string) (*models.User, error) {
+	var user models.User
+	err := r.db.Where("reset_token = ?", token).First(&user).Error
+	return &user, err
+}
+
+func (r *userRepositoryImpl) ClearResetToken(id uint) error {
+	return r.db.Model(&models.User{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"reset_token":        "",
+		"reset_token_expiry": nil,
+	}).Error
 }

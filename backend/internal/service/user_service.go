@@ -1,10 +1,14 @@
 package service
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"csbs/backend/internal/models"
 	"csbs/backend/internal/repository"
+	"csbs/backend/pkg/email"
 	"csbs/backend/pkg/logger"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -18,15 +22,19 @@ type UserService interface {
 	GetAllUsers() ([]models.User, error)
 	UpdateUserStatus(id uint, status string) error
 	UpdateUserRole(id uint, roleName string) error
+	ForgotPassword(userEmail string) error
+	ResetPassword(token, newPassword string) error
 }
 
 type userServiceImpl struct {
-	repo      repository.UserRepository
-	auditRepo repository.AuditRepository
+	repo        repository.UserRepository
+	auditRepo   repository.AuditRepository
+	emailSender *email.Sender
+	appURL      string
 }
 
-func NewUserService(repo repository.UserRepository, auditRepo repository.AuditRepository) UserService {
-	return &userServiceImpl{repo: repo, auditRepo: auditRepo}
+func NewUserService(repo repository.UserRepository, auditRepo repository.AuditRepository, emailSender *email.Sender, appURL string) UserService {
+	return &userServiceImpl{repo: repo, auditRepo: auditRepo, emailSender: emailSender, appURL: appURL}
 }
 
 func (s *userServiceImpl) Register(name, email, phone, password, requestedRole string) (*models.User, error) {
@@ -153,4 +161,67 @@ func (s *userServiceImpl) UpdateUserRole(id uint, roleName string) error {
 		})
 	}
 	return err
+}
+
+func (s *userServiceImpl) ForgotPassword(userEmail string) error {
+	user, err := s.repo.FindByEmail(userEmail)
+	if err != nil || user.ID == 0 {
+		// Don't reveal if the email exists
+		return nil
+	}
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return err
+	}
+	token := hex.EncodeToString(tokenBytes)
+	expiry := time.Now().Add(time.Hour)
+
+	if err := s.repo.SaveResetToken(user.ID, token, expiry); err != nil {
+		return err
+	}
+
+	appURL := s.appURL
+	if appURL == "" {
+		appURL = "http://localhost:5173"
+	}
+	resetURL := fmt.Sprintf("%s/reset-password?token=%s", appURL, token)
+
+	// Всегда логируем ссылку — удобно для разработки и как fallback при блокировке SMTP
+	logger.Info.Printf("RESET LINK [%s]: %s", userEmail, resetURL)
+
+	if s.emailSender != nil && s.emailSender.Configured() {
+		if err := s.emailSender.SendPasswordReset(userEmail, resetURL); err != nil {
+			// Не возвращаем ошибку — ссылка уже в логе, пользователь получит "успех"
+			logger.Warn.Printf("Service: SMTP unavailable for %s (%v) — use the link above from server.log", userEmail, err)
+		}
+	}
+	return nil
+}
+
+func (s *userServiceImpl) ResetPassword(token, newPassword string) error {
+	if token == "" {
+		return errors.New("токен не указан")
+	}
+	if len(newPassword) < 8 {
+		return errors.New("пароль должен содержать минимум 8 символов")
+	}
+
+	user, err := s.repo.FindByResetToken(token)
+	if err != nil || user.ID == 0 {
+		return errors.New("недействительный или истёкший токен")
+	}
+	if user.ResetTokenExpiry == nil || time.Now().After(*user.ResetTokenExpiry) {
+		return errors.New("недействительный или истёкший токен")
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.UpdateColumn(user.ID, "password_hash", string(hashed)); err != nil {
+		return err
+	}
+	return s.repo.ClearResetToken(user.ID)
 }

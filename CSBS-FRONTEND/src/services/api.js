@@ -62,11 +62,37 @@ export const authService = {
         } catch (e) {
             console.error('Logout request failed', e);
         }
-        
+
         localStorage.removeItem('user');
         localStorage.removeItem('isAuthenticated');
         window.dispatchEvent(new Event('authChange'));
-    }
+    },
+
+    async forgotPassword(email) {
+        const res = await fetch(`${API_URL}/users/forgot-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(errorText || 'Ошибка сервера');
+        }
+        return res.json();
+    },
+
+    async resetPassword(token, password) {
+        const res = await fetch(`${API_URL}/users/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, password }),
+        });
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(errorText || 'Ошибка сервера');
+        }
+        return res.json();
+    },
 };
 
 export const apiService = {

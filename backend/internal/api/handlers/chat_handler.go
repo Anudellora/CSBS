@@ -143,11 +143,18 @@ type workspaceCard struct {
 	Capacity     int    `json:"capacity"`
 }
 
+type locationCard struct {
+	ID      uint   `json:"id"`
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
 type chatResponse struct {
 	Reply      string          `json:"reply"`
 	Action     string          `json:"action,omitempty"`
 	Booking    *bookingInfo    `json:"booking,omitempty"`
 	Workspaces []workspaceCard `json:"workspaces,omitempty"`
+	Locations  []locationCard  `json:"locations,omitempty"`
 }
 
 // --- Структура для парсинга ответа Gemini ---
@@ -160,6 +167,7 @@ type geminiAction struct {
 	TimeFrom     string `json:"time_from,omitempty"`
 	TimeTo       string `json:"time_to,omitempty"`
 	WorkspaceIDs []uint `json:"workspace_ids,omitempty"`
+	LocationIDs  []uint `json:"location_ids,omitempty"`
 }
 
 // tryExtractUserID — опциональная авторизация: пытаемся достать user_id из куки,
@@ -286,7 +294,17 @@ func (h *ChatHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 - Включай в workspace_ids только подходящие по запросу пользователя места из списка выше.
 - Не более 12 ID за раз.
 - В поле reply НЕ дублируй сами места списком/перечислением — фронт сам отрисует интерактивные карточки. Достаточно фразы вроде «Вот подходящие варианты, нажмите на карточку, чтобы забронировать».
-- Если подходящих мест нет — используй обычный action "chat" и объясни, почему.`, todayStr, weekdayRu, authStatus, formattedWorkload, locationsInfo, workspacesInfo, tariffsInfo)
+- Если подходящих мест нет — используй обычный action "chat" и объясни, почему.
+
+11. Если пользователь хочет ПОСМОТРЕТЬ список локаций/коворкингов (например: «какие есть локации», «покажи коворкинги», «список адресов», «где вы находитесь», «какие у вас адреса»), используй:
+{
+  "action": "list_locations",
+  "reply": "Вводная фраза (1 предложение без перечисления локаций — карточки покажет интерфейс)",
+  "location_ids": [1, 2, 3]
+}
+- Включай в location_ids все подходящие ID локаций из списка выше.
+- В поле reply НЕ перечисляй локации — напиши только краткую вводную фразу, например: «Вот наши коворкинги, выберите интересующий вас:».
+- После выбора локации пользователем система автоматически покажет места в ней.`, todayStr, weekdayRu, authStatus, formattedWorkload, locationsInfo, workspacesInfo, tariffsInfo)
 
 	// Формируем историю сообщений для контекста
 	var conversationParts []string
@@ -339,6 +357,8 @@ func (h *ChatHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(res)
 	case "list_workspaces":
 		h.handleListWorkspacesAction(w, action)
+	case "list_locations":
+		h.handleListLocationsAction(w, action)
 	default:
 		// Просто чат
 		res := chatResponse{Reply: action.Reply}
@@ -398,6 +418,59 @@ func (h *ChatHandler) handleListWorkspacesAction(w http.ResponseWriter, action g
 		Reply:      action.Reply,
 		Action:     "list_workspaces",
 		Workspaces: cards,
+	})
+}
+
+func (h *ChatHandler) handleListLocationsAction(w http.ResponseWriter, action geminiAction) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if len(action.LocationIDs) == 0 {
+		json.NewEncoder(w).Encode(chatResponse{Reply: action.Reply})
+		return
+	}
+
+	workspaces, err := h.workspaceService.GetAllWorkspaces()
+	if err != nil {
+		logger.Error.Printf("Chat: failed to load workspaces for list_locations: %v", err)
+		json.NewEncoder(w).Encode(chatResponse{Reply: action.Reply})
+		return
+	}
+
+	locByID := map[uint]locationCard{}
+	for _, ws := range workspaces {
+		if ws.LocationID == 0 {
+			continue
+		}
+		if _, ok := locByID[ws.LocationID]; !ok {
+			locByID[ws.LocationID] = locationCard{
+				ID:      ws.LocationID,
+				Name:    ws.Location.Name,
+				Address: ws.Location.Address,
+			}
+		}
+	}
+
+	cards := make([]locationCard, 0, len(action.LocationIDs))
+	seen := map[uint]bool{}
+	for _, id := range action.LocationIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if lc, ok := locByID[id]; ok {
+			cards = append(cards, lc)
+		}
+	}
+
+	if len(cards) == 0 {
+		json.NewEncoder(w).Encode(chatResponse{Reply: action.Reply})
+		return
+	}
+
+	json.NewEncoder(w).Encode(chatResponse{
+		Reply:     action.Reply,
+		Action:    "list_locations",
+		Locations: cards,
 	})
 }
 

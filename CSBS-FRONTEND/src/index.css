@@ -1,21 +1,28 @@
 :root {
-  /* Color Palette based on Turquoise Theme */
+  /* Dark theme (default) — turquoise on deep blue */
   --color-bg-deep: #1a1f26;
-  /* Darker than #222831 for true background */
   --color-bg-panel: #222831;
   --color-bg-card: #283b48;
   --color-accent: #00a6c0;
   --color-accent-hover: #00c4e4;
+  --color-accent-on: #1a1f26;
   --color-text-main: #d8d7ce;
+  --color-text-strong: #ffffff;
   --color-text-muted: #959fa8;
   --color-border: rgba(216, 215, 206, 0.1);
   --color-glass: rgba(34, 40, 49, 0.7);
+  --color-input-bg: rgba(0, 0, 0, 0.2);
+  --color-overlay: rgba(10, 15, 20, 0.85);
+  --color-bg-gradient-1: rgba(0, 166, 192, 0.05);
+  --color-bg-gradient-2: rgba(0, 166, 192, 0.05);
 
   --shadow-accent: 0 0 20px rgba(0, 166, 192, 0.3);
   --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.5);
 
   --transition-fast: 0.2s ease-in-out;
   --transition-smooth: 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+
+  --map-filter: invert(90%) hue-rotate(180deg) contrast(100%);
 
   font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
@@ -29,6 +36,32 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Light theme overrides */
+:root[data-theme='light'] {
+  --color-bg-deep: #f4f6f9;
+  --color-bg-panel: #ffffff;
+  --color-bg-card: #ffffff;
+  --color-accent: #008fa6;
+  --color-accent-hover: #00a6c0;
+  --color-accent-on: #ffffff;
+  --color-text-main: #1f2933;
+  --color-text-strong: #0a1018;
+  --color-text-muted: #5a6573;
+  --color-border: rgba(15, 25, 40, 0.12);
+  --color-glass: rgba(255, 255, 255, 0.78);
+  --color-input-bg: rgba(15, 25, 40, 0.04);
+  --color-overlay: rgba(20, 30, 45, 0.45);
+  --color-bg-gradient-1: rgba(0, 143, 166, 0.08);
+  --color-bg-gradient-2: rgba(0, 143, 166, 0.04);
+
+  --shadow-accent: 0 0 20px rgba(0, 143, 166, 0.2);
+  --shadow-card: 0 10px 30px rgba(15, 25, 40, 0.1);
+
+  --map-filter: none;
+
+  color-scheme: light;
 }
 
 /* Reset */
@@ -45,11 +78,27 @@ body {
   min-height: 100vh;
   background-color: var(--color-bg-deep);
   background-image:
-    radial-gradient(circle at 15% 50%, rgba(0, 166, 192, 0.05), transparent 40%),
-    radial-gradient(circle at 85% 30%, rgba(0, 166, 192, 0.05), transparent 40%);
+    radial-gradient(circle at 15% 50%, var(--color-bg-gradient-1), transparent 40%),
+    radial-gradient(circle at 85% 30%, var(--color-bg-gradient-2), transparent 40%);
   background-attachment: fixed;
   color: var(--color-text-main);
   overflow-x: hidden;
+  transition: background-color var(--transition-smooth), color var(--transition-smooth);
+}
+
+/* Consistent text selection across themes */
+::selection {
+  background-color: var(--color-accent);
+  color: var(--color-accent-on);
+}
+::-moz-selection {
+  background-color: var(--color-accent);
+  color: var(--color-accent-on);
+}
+
+/* Slightly stronger weight in light mode keeps contrast solid */
+:root[data-theme='light'] body {
+  font-weight: 450;
 }
 
 #root {
@@ -66,7 +115,7 @@ h4,
 h5,
 h6 {
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-text-strong);
   margin-bottom: 0.5em;
   letter-spacing: -0.02em;
 }
@@ -115,20 +164,20 @@ a:hover {
 }
 
 .btn:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--color-input-bg);
   transform: translateY(-2px);
 }
 
 .btn-primary {
   background-color: var(--color-accent);
-  color: #1a1f26;
+  color: var(--color-accent-on);
   border: none;
   font-weight: 600;
 }
 
 .btn-primary:hover {
   background-color: var(--color-accent-hover);
-  color: #1a1f26;
+  color: var(--color-accent-on);
   box-shadow: var(--shadow-accent);
   transform: translateY(-2px);
 }
@@ -212,7 +261,7 @@ a:hover {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(10, 15, 20, 0.85);
+  background-color: var(--color-overlay);
   backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
@@ -243,4 +292,86 @@ a:hover {
 @keyframes modalSlideUp {
   from { transform: translateY(20px) scale(0.95); opacity: 0; }
   to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* ---------------------------------------------------------------
+   Light-theme overrides for legacy hardcoded colors.
+   Keeps existing dark styles intact; only adjusts contrast under
+   [data-theme="light"] so we don't have to refactor every file.
+--------------------------------------------------------------- */
+:root[data-theme='light'] .glass-panel {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+:root[data-theme='light'] .footer {
+    background-color: #ffffff;
+}
+
+:root[data-theme='light'] .navbar {
+    background: rgba(255, 255, 255, 0.78);
+}
+
+/* Inputs / textareas / selects readability */
+:root[data-theme='light'] input:not([type='checkbox']):not([type='radio']):not([type='range']),
+:root[data-theme='light'] textarea,
+:root[data-theme='light'] select {
+    color: var(--color-text-main);
+    background-color: var(--color-input-bg);
+}
+
+:root[data-theme='light'] input::placeholder,
+:root[data-theme='light'] textarea::placeholder {
+    color: var(--color-text-muted);
+    opacity: 0.7;
+}
+
+/* Auth modal slider — keeps contrast on the white tab */
+:root[data-theme='light'] .auth-toggle-slider {
+    background-color: rgba(15, 25, 40, 0.06);
+}
+
+/* Override absolute white text inside themed panels */
+:root[data-theme='light'] .chat-input,
+:root[data-theme='light'] .booking-summary,
+:root[data-theme='light'] .booking-card-name,
+:root[data-theme='light'] .info-value,
+:root[data-theme='light'] .profile-card,
+:root[data-theme='light'] .workspace-card,
+:root[data-theme='light'] .tariff-card,
+:root[data-theme='light'] .review-card,
+:root[data-theme='light'] .faq-item,
+:root[data-theme='light'] .mock-table {
+    color: var(--color-text-main);
+}
+
+:root[data-theme='light'] table th,
+:root[data-theme='light'] table td {
+    color: var(--color-text-main);
+}
+
+/* Toast container default text */
+:root[data-theme='light'] .toast {
+    color: var(--color-text-strong);
+}
+
+/* Cards: lighten heavy black backgrounds */
+:root[data-theme='light'] [class*='-card'],
+:root[data-theme='light'] .workspace-card,
+:root[data-theme='light'] .review-card,
+:root[data-theme='light'] .tariff-card,
+:root[data-theme='light'] .faq-item {
+    background-color: #ffffff;
+    box-shadow: var(--shadow-card);
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

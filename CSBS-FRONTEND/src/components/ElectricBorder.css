@@ -53,6 +53,22 @@
   overflow: hidden;
 }
 
+/* Soften hover shadow on light theme so the card doesn't look grey */
+:root[data-theme='light'] .electric-border-wrapper:hover {
+  box-shadow: 0 8px 24px rgba(0, 166, 192, 0.18);
+}
+
+:root[data-theme='light'] .electric-border-wrapper::before {
+  background: conic-gradient(
+    transparent,
+    transparent,
+    transparent,
+    var(--color-accent),
+    #8ce5f5,
+    var(--color-accent)
+  );
+}
+
 @keyframes spin-electric {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }

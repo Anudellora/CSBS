@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { memo, useRef, useEffect } from 'react';
 import './Squares.css';
 
 /**
@@ -14,6 +14,7 @@ const Squares = ({
     borderColor = '#2a4a5e',
     squareSize = 44,
     hoverFillColor = '#00a6c0',
+    vignetteColor = 'rgba(26,31,38,0.8)',
     className = '',
     eventSourceRef = null,
 }) => {
@@ -24,14 +25,21 @@ const Squares = ({
 
     useEffect(() => {
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d', { alpha: true });
+        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
         const resizeCanvas = () => {
             canvas.width = canvas.offsetWidth;
             canvas.height = canvas.offsetHeight;
         };
 
-        window.addEventListener('resize', resizeCanvas);
+        let resizeRaf = 0;
+        const onResize = () => {
+            if (resizeRaf) cancelAnimationFrame(resizeRaf);
+            resizeRaf = requestAnimationFrame(resizeCanvas);
+        };
+        window.addEventListener('resize', onResize, { passive: true });
         resizeCanvas();
 
         const drawGrid = () => {
@@ -69,7 +77,7 @@ const Squares = ({
                 Math.sqrt(canvas.width ** 2 + canvas.height ** 2) / 2
             );
             gradient.addColorStop(0, 'rgba(0,0,0,0)');
-            gradient.addColorStop(1, 'rgba(26,31,38,0.8)');
+            gradient.addColorStop(1, vignetteColor);
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         };
@@ -129,20 +137,25 @@ const Squares = ({
             hoveredSquare.current = null;
         };
 
-        eventTarget.addEventListener('mousemove', handleMouseMove);
-        eventTarget.addEventListener('mouseleave', handleMouseLeave);
+        eventTarget.addEventListener('mousemove', handleMouseMove, { passive: true });
+        eventTarget.addEventListener('mouseleave', handleMouseLeave, { passive: true });
 
-        requestRef.current = requestAnimationFrame(updateAnimation);
+        if (reduceMotion) {
+            drawGrid();
+        } else {
+            requestRef.current = requestAnimationFrame(updateAnimation);
+        }
 
         return () => {
-            window.removeEventListener('resize', resizeCanvas);
-            cancelAnimationFrame(requestRef.current);
+            window.removeEventListener('resize', onResize);
+            if (resizeRaf) cancelAnimationFrame(resizeRaf);
+            if (requestRef.current) cancelAnimationFrame(requestRef.current);
             eventTarget.removeEventListener('mousemove', handleMouseMove);
             eventTarget.removeEventListener('mouseleave', handleMouseLeave);
         };
-    }, [direction, speed, borderColor, hoverFillColor, squareSize, eventSourceRef]);
+    }, [direction, speed, borderColor, hoverFillColor, squareSize, vignetteColor, eventSourceRef]);
 
-    return <canvas ref={canvasRef} className={`squares-canvas ${className}`}></canvas>;
+    return <canvas ref={canvasRef} className={`squares-canvas ${className}`} aria-hidden="true"></canvas>;
 };
 
-export default Squares;
+export default memo(Squares);

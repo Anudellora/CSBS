@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, Eye, EyeOff, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/api';
 import { validateEmail, validatePassword } from '../utils/validators';
 import './AuthModal.css';
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     const { login, register } = useAuth();
-    const [mode, setMode] = useState(initialMode); // 'login' or 'register'
+    const [mode, setMode] = useState(initialMode); // 'login', 'register', or 'forgot'
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [forgotSent, setForgotSent] = useState(false);
 
     // Form states
     const [formData, setFormData] = useState({
@@ -27,15 +29,14 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
         setErrors({});
         setShowPassword(false);
         setShowConfirmPassword(false);
+        setForgotSent(false);
     }, [isOpen, mode]);
 
     useEffect(() => {
+        if (!isOpen) return;
         const handleKeyDown = (e) => {
-            if (e.key === 'Escape' && isOpen) {
-                onClose();
-            }
+            if (e.key === 'Escape') onClose();
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
@@ -90,6 +91,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
         // Validate all relevant fields based on mode
         const fieldsToValidate = mode === 'register'
             ? ['name', 'email', 'phone', 'password', 'confirmPassword']
+            : mode === 'forgot'
+            ? ['email']
             : ['email', 'password'];
 
         fieldsToValidate.forEach(field => {
@@ -115,10 +118,14 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
             try {
                 if (mode === 'register') {
                     await register(formData.name, formData.email, formData.phone, formData.password);
+                    onClose();
+                } else if (mode === 'forgot') {
+                    await authService.forgotPassword(formData.email);
+                    setForgotSent(true);
                 } else {
                     await login(formData.email, formData.password);
+                    onClose();
                 }
-                onClose();
             } catch (err) {
                 console.error("Auth error:", err);
                 setErrors(prev => ({ ...prev, submit: err.message || 'Ошибка сервера. Попробуйте снова.' }));
@@ -134,153 +141,200 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
                 </button>
 
                 <div className="auth-header">
-                    <h2>{mode === 'login' ? 'Вход' : 'Регистрация'}</h2>
+                    <h2>
+                        {mode === 'login' ? 'Вход' : mode === 'register' ? 'Регистрация' : 'Восстановление пароля'}
+                    </h2>
                 </div>
 
-                <div className="auth-toggle-slider">
-                    <div className={`slider-bg ${mode === 'login' ? 'left' : 'right'}`}></div>
-                    <button
-                        type="button"
-                        className={`slider-option ${mode === 'login' ? 'active' : ''}`}
-                        onClick={() => setMode('login')}
-                    >
-                        Войти
-                    </button>
-                    <button
-                        type="button"
-                        className={`slider-option ${mode === 'register' ? 'active' : ''}`}
-                        onClick={() => setMode('register')}
-                    >
-                        Регистрация
-                    </button>
-                </div>
-
-                <form className="auth-form" onSubmit={handleSubmit} noValidate>
-                    {/* Decoy fields to fool password managers */}
-                    <input type="email" style={{ display: 'none' }} name="decoy_email" />
-                    <input type="password" style={{ display: 'none' }} name="decoy_password" />
-
-                    {mode === 'register' && (
-                        <div className="form-group">
-                            <label htmlFor="name">Имя</label>
-                            <div className="input-with-icon">
-                                <User size={18} className="input-icon" />
-                                <input
-                                    type="text"
-                                    id="input_f1"
-                                    placeholder="Введите ваше имя"
-                                    value={formData.name}
-                                    onChange={(e) => handleChange(e, 'name')}
-                                    className={errors.name ? 'input-error' : ''}
-                                    autoComplete="off"
-                                />
-                            </div>
-                            {errors.name && <span className="error-text">{errors.name}</span>}
-                        </div>
-                    )}
-
-                    <div className="form-group">
-                        <label htmlFor="email">Email</label>
-                        <div className="input-with-icon">
-                            <Mail size={18} className="input-icon" />
-                            <input
-                                type="email"
-                                id="input_f2"
-                                placeholder="Введите ваш email"
-                                value={formData.email}
-                                onChange={(e) => handleChange(e, 'email')}
-                                className={errors.email ? 'input-error' : ''}
-                                autoComplete={mode === 'register' ? 'off' : 'email'}
-                            />
-                        </div>
-                        {errors.email && <span className="error-text">{errors.email}</span>}
+                {mode !== 'forgot' && (
+                    <div className="auth-toggle-slider">
+                        <div className={`slider-bg ${mode === 'login' ? 'left' : 'right'}`}></div>
+                        <button
+                            type="button"
+                            className={`slider-option ${mode === 'login' ? 'active' : ''}`}
+                            onClick={() => setMode('login')}
+                        >
+                            Войти
+                        </button>
+                        <button
+                            type="button"
+                            className={`slider-option ${mode === 'register' ? 'active' : ''}`}
+                            onClick={() => setMode('register')}
+                        >
+                            Регистрация
+                        </button>
                     </div>
+                )}
 
-                    {mode === 'register' && (
-                        <>
+                {mode === 'forgot' && forgotSent ? (
+                    <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                        <p style={{ color: 'var(--color-accent)', marginBottom: '1rem', fontSize: '1rem' }}>
+                            Письмо отправлено!
+                        </p>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                            Если аккаунт с таким email существует, вы получите инструкцию по восстановлению пароля.
+                        </p>
+                        <button
+                            type="button"
+                            className="btn btn-primary btn-submit"
+                            onClick={() => setMode('login')}
+                        >
+                            Вернуться к входу
+                        </button>
+                    </div>
+                ) : (
+                    <form className="auth-form" onSubmit={handleSubmit} noValidate>
+                        {/* Decoy fields to fool password managers */}
+                        <input type="email" style={{ display: 'none' }} name="decoy_email" />
+                        <input type="password" style={{ display: 'none' }} name="decoy_password" />
+
+                        {mode === 'register' && (
                             <div className="form-group">
-                                <label htmlFor="phone">Телефон</label>
+                                <label htmlFor="name">Имя</label>
                                 <div className="input-with-icon">
-                                    <Phone size={18} className="input-icon" />
+                                    <User size={18} className="input-icon" />
                                     <input
-                                        type="tel"
-                                        id="input_f3"
-                                        placeholder="+7 (999) 000-00-00"
-                                        value={formData.phone}
-                                        onChange={(e) => handleChange(e, 'phone')}
-                                        className={errors.phone ? 'input-error' : ''}
+                                        type="text"
+                                        id="input_f1"
+                                        placeholder="Введите ваше имя"
+                                        value={formData.name}
+                                        onChange={(e) => handleChange(e, 'name')}
+                                        className={errors.name ? 'input-error' : ''}
                                         autoComplete="off"
                                     />
                                 </div>
-                                {errors.phone && <span className="error-text">{errors.phone}</span>}
+                                {errors.name && <span className="error-text">{errors.name}</span>}
                             </div>
-                        </>
-                    )}
+                        )}
 
-                    <div className="form-group">
-                        <label htmlFor="password">Пароль</label>
-                        <div className="input-with-icon">
-                            <Lock size={18} className="input-icon" />
-                            <input
-                                type={showPassword ? 'text' : 'password'}
-                                id="input_f4"
-                                name={`pwd_${Math.random().toString(36).slice(2)}`}
-                                placeholder="Введите пароль"
-                                value={formData.password}
-                                onChange={(e) => handleChange(e, 'password')}
-                                className={errors.password ? 'input-error' : ''}
-                                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                            />
-                            <button
-                                type="button"
-                                className="password-toggle-btn"
-                                onClick={() => setShowPassword(!showPassword)}
-                                tabIndex="-1"
-                            >
-                                {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
-                            </button>
-                        </div>
-                        {errors.password && <span className="error-text">{errors.password}</span>}
-                    </div>
-
-                    {mode === 'register' && (
                         <div className="form-group">
-                            <label htmlFor="confirmPassword">Подтвердите пароль</label>
+                            <label htmlFor="email">Email</label>
                             <div className="input-with-icon">
-                                <Lock size={18} className="input-icon" />
+                                <Mail size={18} className="input-icon" />
                                 <input
-                                    type={showConfirmPassword ? 'text' : 'password'}
-                                    id="input_f5"
-                                    name={`cpwd_${Math.random().toString(36).slice(2)}`}
-                                    placeholder="Повторите пароль"
-                                    value={formData.confirmPassword}
-                                    onChange={(e) => handleChange(e, 'confirmPassword')}
-                                    className={errors.confirmPassword ? 'input-error' : ''}
-                                    autoComplete="new-password"
+                                    type="email"
+                                    id="input_f2"
+                                    placeholder="Введите ваш email"
+                                    value={formData.email}
+                                    onChange={(e) => handleChange(e, 'email')}
+                                    className={errors.email ? 'input-error' : ''}
+                                    autoComplete={mode === 'register' ? 'off' : 'email'}
                                 />
+                            </div>
+                            {errors.email && <span className="error-text">{errors.email}</span>}
+                        </div>
+
+                        {mode === 'register' && (
+                            <>
+                                <div className="form-group">
+                                    <label htmlFor="phone">Телефон</label>
+                                    <div className="input-with-icon">
+                                        <Phone size={18} className="input-icon" />
+                                        <input
+                                            type="tel"
+                                            id="input_f3"
+                                            placeholder="+7 (999) 000-00-00"
+                                            value={formData.phone}
+                                            onChange={(e) => handleChange(e, 'phone')}
+                                            className={errors.phone ? 'input-error' : ''}
+                                            autoComplete="off"
+                                        />
+                                    </div>
+                                    {errors.phone && <span className="error-text">{errors.phone}</span>}
+                                </div>
+                            </>
+                        )}
+
+                        {mode !== 'forgot' && (
+                            <div className="form-group">
+                                <label htmlFor="password">Пароль</label>
+                                <div className="input-with-icon">
+                                    <Lock size={18} className="input-icon" />
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        id="input_f4"
+                                        name={`pwd_${Math.random().toString(36).slice(2)}`}
+                                        placeholder="Введите пароль"
+                                        value={formData.password}
+                                        onChange={(e) => handleChange(e, 'password')}
+                                        className={errors.password ? 'input-error' : ''}
+                                        autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="password-toggle-btn"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        tabIndex="-1"
+                                    >
+                                        {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+                                    </button>
+                                </div>
+                                {errors.password && <span className="error-text">{errors.password}</span>}
+                            </div>
+                        )}
+
+                        {mode === 'login' && (
+                            <div style={{ textAlign: 'right', marginTop: '-0.5rem' }}>
                                 <button
                                     type="button"
-                                    className="password-toggle-btn"
-                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                    tabIndex="-1"
+                                    className="auth-link-btn"
+                                    onClick={() => setMode('forgot')}
                                 >
-                                    {showConfirmPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+                                    Забыли пароль?
                                 </button>
                             </div>
-                            {errors.confirmPassword && <span className="error-text">{errors.confirmPassword}</span>}
-                        </div>
-                    )}
+                        )}
 
-                    {errors.submit && (
-                        <div className="form-error-banner" style={{ color: '#ff4d4f', marginBottom: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
-                            {errors.submit}
-                        </div>
-                    )}
+                        {mode === 'register' && (
+                            <div className="form-group">
+                                <label htmlFor="confirmPassword">Подтвердите пароль</label>
+                                <div className="input-with-icon">
+                                    <Lock size={18} className="input-icon" />
+                                    <input
+                                        type={showConfirmPassword ? 'text' : 'password'}
+                                        id="input_f5"
+                                        name={`cpwd_${Math.random().toString(36).slice(2)}`}
+                                        placeholder="Повторите пароль"
+                                        value={formData.confirmPassword}
+                                        onChange={(e) => handleChange(e, 'confirmPassword')}
+                                        className={errors.confirmPassword ? 'input-error' : ''}
+                                        autoComplete="new-password"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="password-toggle-btn"
+                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                        tabIndex="-1"
+                                    >
+                                        {showConfirmPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+                                    </button>
+                                </div>
+                                {errors.confirmPassword && <span className="error-text">{errors.confirmPassword}</span>}
+                            </div>
+                        )}
 
-                    <button type="submit" className="btn btn-primary btn-submit">
-                        {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
-                    </button>
-                </form>
+                        {errors.submit && (
+                            <div className="form-error-banner" style={{ color: '#ff4d4f', marginBottom: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
+                                {errors.submit}
+                            </div>
+                        )}
+
+                        <button type="submit" className="btn btn-primary btn-submit">
+                            {mode === 'login' ? 'Войти' : mode === 'register' ? 'Зарегистрироваться' : 'Отправить письмо'}
+                        </button>
+
+                        {mode === 'forgot' && (
+                            <button
+                                type="button"
+                                className="auth-link-btn"
+                                style={{ width: '100%', textAlign: 'center', marginTop: '0.5rem' }}
+                                onClick={() => setMode('login')}
+                            >
+                                Вернуться к входу
+                            </button>
+                        )}
+                    </form>
+                )}
             </div>
         </div>
     );

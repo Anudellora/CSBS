@@ -38,6 +38,8 @@ func (h *UserHandler) Routes() http.Handler {
 	r.Post("/register", h.register)
 	r.Post("/login", h.login)
 	r.Post("/logout", h.logout)
+	r.Post("/forgot-password", h.forgotPassword)
+	r.Post("/reset-password", h.resetPassword)
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
@@ -123,6 +125,41 @@ func (h *UserHandler) logout(w http.ResponseWriter, r *http.Request) {
 	
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("logged out successfully"))
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+func (h *UserHandler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	// Always return 200 — не раскрываем, существует ли email
+	h.service.ForgotPassword(req.Email)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Если аккаунт с таким email существует, письмо отправлено"})
+}
+
+type resetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+func (h *UserHandler) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if err := h.service.ResetPassword(req.Token, req.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Пароль успешно изменён"})
 }
 
 func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {

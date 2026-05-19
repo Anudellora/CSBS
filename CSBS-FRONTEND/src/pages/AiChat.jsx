@@ -8,39 +8,74 @@ import { useAuth } from '../context/AuthContext';
 import './AiChat.css';
 
 
+function LocationsGrid({ locations, onPick, disabled }) {
+    if (!locations || locations.length === 0) return null;
+    return (
+        <div className="workspaces-grid">
+            {locations.map((loc) => (
+                <div key={loc.id} className="workspace-card">
+                    <div className="workspace-card-header">
+                        <Building2 size={16} />
+                        <span className="workspace-card-name">{loc.name}</span>
+                    </div>
+                    <div className="workspace-card-body">
+                        {loc.address && (
+                            <div className="workspace-card-row">
+                                <MapPin size={14} />
+                                <span>{loc.address}</span>
+                            </div>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        className="workspace-card-cta"
+                        onClick={() => onPick(loc)}
+                        disabled={disabled}
+                    >
+                        Показать места
+                    </button>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 function WorkspacesGrid({ workspaces, onPick, disabled }) {
     if (!workspaces || workspaces.length === 0) return null;
     return (
         <div className="workspaces-grid">
             {workspaces.map((ws) => (
-                <button
-                    key={ws.id}
-                    type="button"
-                    className="workspace-card"
-                    onClick={() => onPick(ws)}
-                    disabled={disabled}
-                    title={`Забронировать ${ws.name}`}
-                >
+                <div key={ws.id} className="workspace-card">
                     <div className="workspace-card-header">
+                        <MapPin size={16} />
                         <span className="workspace-card-name">{ws.name}</span>
                         {ws.category && (
                             <span className="workspace-card-badge">{ws.category}</span>
                         )}
                     </div>
-                    {ws.location_name && (
-                        <div className="workspace-card-row">
-                            <Building2 size={14} />
-                            <span>{ws.location_name}</span>
-                        </div>
-                    )}
-                    {ws.capacity > 0 && (
-                        <div className="workspace-card-row">
-                            <Users size={14} />
-                            <span>до {ws.capacity} чел.</span>
-                        </div>
-                    )}
-                    <span className="workspace-card-cta">Забронировать</span>
-                </button>
+                    <div className="workspace-card-body">
+                        {ws.location_name && (
+                            <div className="workspace-card-row">
+                                <Building2 size={14} />
+                                <span>{ws.location_name}</span>
+                            </div>
+                        )}
+                        {ws.capacity > 0 && (
+                            <div className="workspace-card-row">
+                                <Users size={14} />
+                                <span>до {ws.capacity} чел.</span>
+                            </div>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        className="workspace-card-cta"
+                        onClick={() => onPick(ws)}
+                        disabled={disabled}
+                    >
+                        Забронировать
+                    </button>
+                </div>
             ))}
         </div>
     );
@@ -109,11 +144,14 @@ export default function AiChat() {
         sessionStorage.setItem('ai_chat_history', JSON.stringify(messages));
 
         const lastMsg = messages[messages.length - 1];
-        // Если последнее сообщение — список карточек, прокручиваем так,
-        // чтобы его НАЧАЛО оказалось в верху видимой области (карточки видны сразу).
-        // В остальных случаях — обычный скролл к низу.
-        if (lastMsg?.action === 'list_workspaces' && lastMessageRef.current) {
-            lastMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const isCardList = lastMsg?.action === 'list_workspaces' || lastMsg?.action === 'list_locations';
+
+        if (isCardList && lastMessageRef.current && messagesContainerRef.current) {
+            // Скроллим только внутри контейнера, не затрагивая страницу
+            const container = messagesContainerRef.current;
+            const msgEl = lastMessageRef.current;
+            const offset = msgEl.offsetTop - container.offsetTop;
+            container.scrollTo({ top: offset, behavior: 'smooth' });
         } else {
             scrollToBottom();
         }
@@ -143,6 +181,7 @@ export default function AiChat() {
                 action: data.action || null,
                 booking: data.booking || null,
                 workspaces: data.workspaces || null,
+                locations: data.locations || null,
             };
 
             setMessages(msgs => [...msgs, aiMessage]);
@@ -158,8 +197,6 @@ export default function AiChat() {
     };
 
     const handlePickWorkspace = (ws) => {
-        // Переходим на страницу бронирования с предзаполнением места и локации,
-        // чтобы пользователь мог выбрать дату/время и подтвердить.
         navigate('/booking', {
             state: {
                 workspaceName: ws.name,
@@ -167,6 +204,10 @@ export default function AiChat() {
                 bookingType: categoryToBookingType(ws.category),
             },
         });
+    };
+
+    const handlePickLocation = (loc) => {
+        handleSend(`Покажи доступные места в локации "${loc.name}"`);
     };
 
     const handleKeyDown = (e) => {
@@ -233,6 +274,15 @@ export default function AiChat() {
                                     {/* Карточка бронирования */}
                                     {msg.action === 'booked' && msg.booking && (
                                         <BookingCard booking={msg.booking} />
+                                    )}
+
+                                    {/* Список локаций */}
+                                    {msg.action === 'list_locations' && msg.locations && (
+                                        <LocationsGrid
+                                            locations={msg.locations}
+                                            onPick={handlePickLocation}
+                                            disabled={isLoading || !isLoggedIn}
+                                        />
                                     )}
 
                                     {/* Список доступных мест */}
