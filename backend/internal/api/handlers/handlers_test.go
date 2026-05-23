@@ -20,7 +20,6 @@ import (
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock-реализации сервисных интерфейсов
-// ─────────────────────────────────────────────────────────────────────────────
 
 // -- TariffService mock --
 
@@ -29,10 +28,10 @@ type mockTariffService struct {
 	err     error
 }
 
-func (m *mockTariffService) GetAll() ([]models.Tariff, error)          { return m.tariffs, m.err }
-func (m *mockTariffService) CreateTariff(t *models.Tariff) error       { return m.err }
-func (m *mockTariffService) UpdateTariff(t *models.Tariff) error       { return m.err }
-func (m *mockTariffService) DeleteTariff(id uint) error                { return m.err }
+func (m *mockTariffService) GetAll() ([]models.Tariff, error)    { return m.tariffs, m.err }
+func (m *mockTariffService) CreateTariff(t *models.Tariff) error { return m.err }
+func (m *mockTariffService) UpdateTariff(t *models.Tariff) error { return m.err }
+func (m *mockTariffService) DeleteTariff(id uint) error          { return m.err }
 
 var _ service.TariffService = (*mockTariffService)(nil)
 
@@ -47,11 +46,11 @@ type mockUserService struct {
 func (m *mockUserService) Register(name, email, phone, password, role string) (*models.User, error) {
 	return m.user, m.err
 }
-func (m *mockUserService) Login(email, password string) (string, error) { return m.token, m.err }
-func (m *mockUserService) GetUserByID(id uint) (*models.User, error)    { return m.user, m.err }
-func (m *mockUserService) GetAllUsers() ([]models.User, error)          { return nil, m.err }
+func (m *mockUserService) Login(email, password string) (string, error)  { return m.token, m.err }
+func (m *mockUserService) GetUserByID(id uint) (*models.User, error)     { return m.user, m.err }
+func (m *mockUserService) GetAllUsers() ([]models.User, error)           { return nil, m.err }
 func (m *mockUserService) UpdateUserStatus(id uint, status string) error { return m.err }
-func (m *mockUserService) UpdateUserRole(id uint, roleName string) error  { return m.err }
+func (m *mockUserService) UpdateUserRole(id uint, roleName string) error { return m.err }
 
 var _ service.UserService = (*mockUserService)(nil)
 
