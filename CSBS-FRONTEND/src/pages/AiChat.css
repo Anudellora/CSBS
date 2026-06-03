@@ -11,6 +11,93 @@
     align-items: center;
     gap: 1.5rem;
     margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.chat-header-info {
+    flex: 1;
+    min-width: 220px;
+}
+
+/* Model switcher (Gemini / GigaChat) */
+.model-switcher {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    min-width: 220px;
+}
+
+.model-switcher-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.model-switcher-label svg {
+    color: var(--color-accent);
+}
+
+.model-switcher-options {
+    display: flex;
+    gap: 6px;
+}
+
+.model-option {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-main);
+    cursor: pointer;
+    transition: all var(--transition-short);
+    font-family: inherit;
+    text-align: left;
+}
+
+.model-option:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    background: rgba(0, 166, 192, 0.08);
+}
+
+.model-option.active {
+    border-color: var(--color-accent);
+    background: rgba(0, 166, 192, 0.15);
+    box-shadow: var(--shadow-accent);
+}
+
+.model-option:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.model-option-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-strong);
+}
+
+.model-option.active .model-option-label {
+    color: var(--color-accent);
+}
+
+.model-option-origin {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    text-transform: lowercase;
 }
 
 .ai-avatar {

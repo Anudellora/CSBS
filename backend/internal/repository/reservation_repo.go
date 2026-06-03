@@ -17,6 +17,9 @@ type ReservationRepository interface {
 	HasConflict(workspaceID uint, startTime, endTime time.Time) (bool, error)
 	HasConflictExcluding(workspaceID uint, startTime, endTime time.Time, excludeID uint) (bool, error)
 	GetUnavailableWorkspaceIDs(startTime, endTime time.Time) ([]uint, error)
+	GetPendingReminders(kind string, now time.Time) ([]models.Reservation, error)
+	MarkReminderSent(id uint, kind string) error
+	GetReservationsBetween(from, to time.Time) ([]models.Reservation, error)
 }
 type reservationRepositoryImpl struct {
 	db *gorm.DB
@@ -102,4 +105,66 @@ func (r *reservationRepositoryImpl) GetUnavailableWorkspaceIDs(startTime, endTim
 		Where("start_time < ? AND end_time > ? AND status != 'отменено'", endTime, startTime).
 		Pluck("DISTINCT workspace_id", &ids).Error
 	return ids, err
+}
+
+// GetPendingReminders ищет активные бронирования, которым пора отправить напоминание.
+// kind = "24h" → старт ещё впереди и наступит не позже чем через 24 часа, флаг 24h не выставлен.
+// kind = "3h"  → старт ещё впереди и наступит не позже чем через 3 часа, флаг 3h не выставлен.
+// Окно «снизу не ограничено будущим» сознательно — если сервер был выключен и интервал пропущен,
+// напоминание всё равно уйдёт, пока бронь не началась.
+func (r *reservationRepositoryImpl) GetPendingReminders(kind string, now time.Time) ([]models.Reservation, error) {
+	var (
+		reservations []models.Reservation
+		flagColumn   string
+		threshold    time.Time
+	)
+	switch kind {
+	case "24h":
+		flagColumn = "notified_24h"
+		threshold = now.Add(24 * time.Hour)
+	case "3h":
+		flagColumn = "notified_3h"
+		threshold = now.Add(3 * time.Hour)
+	default:
+		return nil, nil
+	}
+
+	err := r.db.
+		Preload("User").
+		Preload("Workspace").
+		Preload("Workspace.Location").
+		Preload("Tariff").
+		Where("status = ? AND start_time > ? AND start_time <= ? AND "+flagColumn+" = ?",
+			"подтверждено", now, threshold, false).
+		Find(&reservations).Error
+	return reservations, err
+}
+
+// GetReservationsBetween возвращает все бронирования (кроме отменённых),
+// у которых StartTime попадает в [from, to). Используется для аналитики/дашборда.
+func (r *reservationRepositoryImpl) GetReservationsBetween(from, to time.Time) ([]models.Reservation, error) {
+	var reservations []models.Reservation
+	err := r.db.
+		Preload("Workspace").
+		Preload("Workspace.Location").
+		Preload("Workspace.Category").
+		Where("start_time >= ? AND start_time < ? AND status != ?", from, to, "отменено").
+		Find(&reservations).Error
+	return reservations, err
+}
+
+// MarkReminderSent проставляет флаг отправленного напоминания, чтобы не дублировать письма.
+func (r *reservationRepositoryImpl) MarkReminderSent(id uint, kind string) error {
+	var column string
+	switch kind {
+	case "24h":
+		column = "notified_24h"
+	case "3h":
+		column = "notified_3h"
+	default:
+		return nil
+	}
+	return r.db.Model(&models.Reservation{}).
+		Where("id = ?", id).
+		Update(column, true).Error
 }

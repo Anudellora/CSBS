@@ -5,11 +5,13 @@ import (
 	"csbs/backend/internal/models"
 	"csbs/backend/internal/service"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type ReservationHandler struct {
@@ -26,6 +28,7 @@ func (h *ReservationHandler) Routes() http.Handler {
 	r.Post("/", h.create)
 	r.Get("/", h.getUserReservations)
 	r.Get("/availability", h.getAvailability)
+	r.Get("/{id}/pass", h.getPass)
 
 	// Админские роуты
 	r.With(middleware.RequireRole(models.RoleCoworkAdmin, models.RoleSystemAdmin)).
@@ -198,6 +201,77 @@ func (h *ReservationHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// getPass возвращает подписанный JWT-пропуск для активной брони пользователя.
+// Фронт зашивает этот токен в QR-код; сканер на входе проверит подпись и срок действия.
+func (h *ReservationHandler) getPass(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(middleware.UserIDKey).(uint)
+
+	id, err := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "Некорректный ID", http.StatusBadRequest)
+		return
+	}
+
+	reservation, err := h.service.GetReservationByID(uint(id))
+	if err != nil {
+		http.Error(w, "Бронирование не найдено", http.StatusNotFound)
+		return
+	}
+
+	if reservation.UserID != userID {
+		http.Error(w, "Бронирование принадлежит другому пользователю", http.StatusForbidden)
+		return
+	}
+
+	if err := assertReservationActive(reservation); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	token, err := signReservationPass(reservation)
+	if err != nil {
+		http.Error(w, "Не удалось создать пропуск", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"token":         token,
+		"reservation_id": reservation.ID,
+		"workspace":     reservation.Workspace.NameOrNumber,
+		"location":      reservation.Workspace.Location.Name,
+		"start_time":    reservation.StartTime,
+		"end_time":      reservation.EndTime,
+		"expires_at":    reservation.EndTime,
+	})
+}
+
+func assertReservationActive(r *models.Reservation) error {
+	if r.Status == "отменено" {
+		return errors.New("бронь отменена")
+	}
+	if time.Now().After(r.EndTime) {
+		return errors.New("бронь уже завершена")
+	}
+	return nil
+}
+
+// signReservationPass подписывает JWT тем же секретом, что и auth-токены, но с purpose=checkin,
+// чтобы пропуск нельзя было использовать для доступа к API, и наоборот.
+func signReservationPass(r *models.Reservation) (string, error) {
+	claims := jwt.MapClaims{
+		"purpose":        "checkin",
+		"reservation_id": r.ID,
+		"user_id":        r.UserID,
+		"workspace_id":   r.WorkspaceID,
+		"start_time":     r.StartTime.Unix(),
+		"exp":            r.EndTime.Unix(),
+		"iat":            time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte("my-secret-key"))
 }
 
 func (h *ReservationHandler) getAvailability(w http.ResponseWriter, r *http.Request) {

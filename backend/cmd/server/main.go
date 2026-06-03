@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"csbs/backend/internal/api/handlers"
 	"csbs/backend/internal/config"
 	"csbs/backend/internal/models"
@@ -8,10 +9,13 @@ import (
 	"csbs/backend/internal/service"
 	"csbs/backend/pkg/email"
 	"csbs/backend/pkg/gemini"
+	"csbs/backend/pkg/gigachat"
+	csbskafka "csbs/backend/pkg/kafka"
 	"csbs/backend/pkg/logger"
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -33,7 +37,9 @@ func main() {
 	// Подстраховка: создаю БД программно, если вдруг забыл создать ручками
 	config.EnsureDatabaseExists(cfg)
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Europe/Moscow",
+	// Пароль квотим в одинарных кавычках: без этого пустой DB_PASSWORD ломает
+	// парсинг DSN в lib/pq, и GORM молча падает на дефолт `dbname=postgres`.
+	dsn := fmt.Sprintf("host=%s user=%s password='%s' dbname=%s port=%s sslmode=disable TimeZone=Europe/Moscow",
 		cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBPort)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -75,13 +81,26 @@ func main() {
 	workspaceService := service.NewWorkspaceService(workspaceRepo)
 	emailSender := email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword)
 	userService := service.NewUserService(userRepo, auditRepo, emailSender, cfg.AppURL)
-	reservationService := service.NewReservationService(reservationRepo, auditRepo)
+
+	// Kafka: продюсер для событий брони + два консьюмера (email + аудит).
+	// Если KAFKA_BROKERS пуст — всё no-op, остальное приложение работает.
+	kafkaProducer := csbskafka.NewProducer(cfg.KafkaBrokers)
+	service.StartBookingEventConsumers(context.Background(), cfg.KafkaBrokers, emailSender, auditRepo)
+
+	reservationService := service.NewReservationService(reservationRepo, auditRepo, kafkaProducer)
 	tariffService := service.NewTariffService(tariffRepo)
 	categoryService := service.NewCategoryService(categoryRepo)
 	amenityService := service.NewAmenityService(amenityRepo)
 	auditLogService := service.NewAuditLogService(auditRepo)
 
 	geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
+	var gigachatClient *gigachat.GigaChatClient
+	if cfg.GigaChatAuthKey != "" {
+		gigachatClient = gigachat.NewClient(cfg.GigaChatAuthKey)
+		log.Println("GigaChat client initialized")
+	} else {
+		log.Println("GigaChat не настроен (GIGACHAT_AUTH_KEY пустой) — будет доступен только Gemini")
+	}
 	predictionService, err := service.NewPredictionService(geminiClient, "workload_model.txt")
 	if err != nil {
 		logger.Error.Fatalf("Не удалось инициализировать Prediction Service: %v", err)
@@ -101,7 +120,14 @@ func main() {
 	if predictionService == nil {
 		log.Fatalf("Ошибка: predictionService is nil!")
 	}
-	chatHandler := handlers.NewChatHandler(geminiClient, predictionService, reservationService, workspaceService, tariffService)
+	chatHandler := handlers.NewChatHandler(geminiClient, gigachatClient, predictionService, reservationService, workspaceService, tariffService)
+
+	analyticsService := service.NewAnalyticsService(reservationRepo, workspaceRepo, predictionService)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
+
+	// Фоновый сервис: шлёт письма-напоминания о бронях за 24ч и за 3ч до начала.
+	reminderService := service.NewReminderService(reservationRepo, emailSender, time.Minute)
+	reminderService.Start(context.Background())
 
 	r := chi.NewRouter()
 	// Навешиваю middleware: логгер, защиту от падений и CORS
@@ -131,6 +157,7 @@ func main() {
 		r.Mount("/auditlogs", auditLogHandler.Routes())
 		r.Mount("/predictions", predictionHandler.Routes())
 		r.Mount("/chat", chatHandler.Routes())
+		r.Mount("/analytics", analyticsHandler.Routes())
 	})
 
 	// Заполняю базу дефолтными данными

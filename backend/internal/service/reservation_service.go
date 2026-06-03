@@ -3,6 +3,7 @@ package service
 import (
 	"csbs/backend/internal/models"
 	"csbs/backend/internal/repository"
+	"csbs/backend/pkg/kafka"
 	"csbs/backend/pkg/logger"
 	"errors"
 	"time"
@@ -12,6 +13,7 @@ type ReservationService interface {
 	CreateReservation(userID, workspaceID, tariffID uint, startTime, endTime time.Time) (*models.Reservation, error)
 	GetUserReservations(userID uint) ([]models.Reservation, error)
 	GetAllReservations() ([]models.Reservation, error)
+	GetReservationByID(id uint) (*models.Reservation, error)
 	UpdateReservation(id uint, workspaceID, tariffID uint, startTime, endTime time.Time, status string, actorUserID uint) (*models.Reservation, error)
 	DeleteReservation(id, actorUserID uint) error
 	GetUnavailableWorkspaceIDs(startTime, endTime time.Time) ([]uint, error)
@@ -19,10 +21,38 @@ type ReservationService interface {
 type reservationServiceImpl struct {
 	repo      repository.ReservationRepository
 	auditRepo repository.AuditRepository
+	producer  *kafka.Producer // nil → события не публикуются, остальное работает
 }
 
-func NewReservationService(repo repository.ReservationRepository, auditRepo repository.AuditRepository) ReservationService {
-	return &reservationServiceImpl{repo: repo, auditRepo: auditRepo}
+func NewReservationService(repo repository.ReservationRepository, auditRepo repository.AuditRepository, producer *kafka.Producer) ReservationService {
+	return &reservationServiceImpl{repo: repo, auditRepo: auditRepo, producer: producer}
+}
+
+// loadBookingEvent дотягивает связанные сущности и собирает денормализованный
+// payload для Kafka. Если бронь по какой-то причине недоступна — публикуется
+// минимальный набор полей.
+func (s *reservationServiceImpl) publishBookingEvent(eventType string, id uint) {
+	if s.producer == nil {
+		return
+	}
+	r, err := s.repo.GetByID(id)
+	if err != nil || r == nil {
+		logger.Warn.Printf("Kafka: cannot enrich %s for reservation=%d: %v", eventType, id, err)
+		return
+	}
+	s.producer.PublishAsync(kafka.BookingEvent{
+		Type:          eventType,
+		ReservationID: r.ID,
+		UserID:        r.UserID,
+		UserEmail:     r.User.Email,
+		UserName:      r.User.FullName,
+		WorkspaceID:   r.WorkspaceID,
+		WorkspaceName: r.Workspace.NameOrNumber,
+		LocationName:  r.Workspace.Location.Name,
+		StartTime:     r.StartTime,
+		EndTime:       r.EndTime,
+		Status:        r.Status,
+	})
 }
 func (s *reservationServiceImpl) CreateReservation(userID, workspaceID, tariffID uint, startTime, endTime time.Time) (*models.Reservation, error) {
 	logger.Info.Printf("Service: Creating reservation for UserID %d, WorkspaceID %d", userID, workspaceID)
@@ -53,6 +83,7 @@ func (s *reservationServiceImpl) CreateReservation(userID, workspaceID, tariffID
 			EntityID:   reservation.ID,
 			Timestamp:  time.Now(),
 		})
+		s.publishBookingEvent(kafka.EventBookingCreated, reservation.ID)
 	} else {
 		logger.Error.Printf("Service: Error creating reservation: %v", err)
 	}
@@ -66,6 +97,10 @@ func (s *reservationServiceImpl) GetUserReservations(userID uint) ([]models.Rese
 func (s *reservationServiceImpl) GetAllReservations() ([]models.Reservation, error) {
 	logger.Info.Println("Service: Requesting all reservations (Admin)")
 	return s.repo.GetAll()
+}
+
+func (s *reservationServiceImpl) GetReservationByID(id uint) (*models.Reservation, error) {
+	return s.repo.GetByID(id)
 }
 
 func (s *reservationServiceImpl) UpdateReservation(id uint, workspaceID, tariffID uint, startTime, endTime time.Time, status string, actorUserID uint) (*models.Reservation, error) {
@@ -107,12 +142,20 @@ func (s *reservationServiceImpl) UpdateReservation(id uint, workspaceID, tariffI
 		Timestamp:  time.Now(),
 	})
 
+	eventType := kafka.EventBookingUpdated
+	if status == "отменено" {
+		eventType = kafka.EventBookingCancelled
+	}
+	s.publishBookingEvent(eventType, reservation.ID)
+
 	return s.repo.GetByID(id)
 }
 
 func (s *reservationServiceImpl) DeleteReservation(id, actorUserID uint) error {
 	logger.Info.Printf("Service: Deleting reservation ID %d", id)
-	if _, err := s.repo.GetByID(id); err != nil {
+	// Снимаем снапшот до удаления, чтобы консьюмеры получили нормальный payload.
+	snapshot, err := s.repo.GetByID(id)
+	if err != nil {
 		return errors.New("бронирование не найдено")
 	}
 	if err := s.repo.Delete(id); err != nil {
@@ -126,6 +169,21 @@ func (s *reservationServiceImpl) DeleteReservation(id, actorUserID uint) error {
 		EntityID:   id,
 		Timestamp:  time.Now(),
 	})
+	if s.producer != nil && snapshot != nil {
+		s.producer.PublishAsync(kafka.BookingEvent{
+			Type:          kafka.EventBookingCancelled,
+			ReservationID: snapshot.ID,
+			UserID:        snapshot.UserID,
+			UserEmail:     snapshot.User.Email,
+			UserName:      snapshot.User.FullName,
+			WorkspaceID:   snapshot.WorkspaceID,
+			WorkspaceName: snapshot.Workspace.NameOrNumber,
+			LocationName:  snapshot.Workspace.Location.Name,
+			StartTime:     snapshot.StartTime,
+			EndTime:       snapshot.EndTime,
+			Status:        "удалено",
+		})
+	}
 	return nil
 }
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Send, User, Loader2, CalendarCheck, Clock, MapPin, LogIn, Lock, Users, Building2 } from 'lucide-react';
+import { Bot, Send, User, Loader2, CalendarCheck, Clock, MapPin, LogIn, Lock, Users, Building2, Cpu } from 'lucide-react';
 import { apiService } from '../services/api';
 import { categoryToBookingType } from '../utils/formatters';
 import AuthModal from '../components/AuthModal';
@@ -128,10 +128,37 @@ export default function AiChat() {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [models, setModels] = useState([]);
+    const [selectedModel, setSelectedModel] = useState(() => {
+        return localStorage.getItem('ai_chat_model') || 'gigachat';
+    });
     const messagesContainerRef = useRef(null);
     const lastMessageRef = useRef(null);
     const { isLoggedIn } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        apiService.getAiModels()
+            .then(list => {
+                setModels(list);
+                // Если сохранённая модель недоступна на сервере — переключаемся на первую доступную
+                const current = list.find(m => m.id === selectedModel);
+                if (!current?.available) {
+                    const firstAvailable = list.find(m => m.available);
+                    if (firstAvailable) {
+                        setSelectedModel(firstAvailable.id);
+                        localStorage.setItem('ai_chat_model', firstAvailable.id);
+                    }
+                }
+            })
+            .catch(err => console.error('Failed to load AI models', err));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const handleModelChange = (modelId) => {
+        setSelectedModel(modelId);
+        localStorage.setItem('ai_chat_model', modelId);
+    };
 
     const scrollToBottom = () => {
         const el = messagesContainerRef.current;
@@ -173,7 +200,7 @@ export default function AiChat() {
                 .slice(-10) // последние 10 сообщений
                 .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
 
-            const data = await apiService.sendAiMessage(userMessage, history);
+            const data = await apiService.sendAiMessage(userMessage, history, selectedModel);
 
             const aiMessage = {
                 role: 'ai',
@@ -220,10 +247,35 @@ export default function AiChat() {
                 <div className="ai-avatar">
                     <Bot size={32} className="text-accent" />
                 </div>
-                <div>
+                <div className="chat-header-info">
                     <h2>ИИ-Ассистент</h2>
                     <p className="text-muted">Прогнозирование цен, подбор и бронирование рабочего пространства</p>
                 </div>
+                {models.length > 0 && (
+                    <div className="model-switcher" role="radiogroup" aria-label="Выбор модели ИИ">
+                        <div className="model-switcher-label">
+                            <Cpu size={14} />
+                            <span>Модель</span>
+                        </div>
+                        <div className="model-switcher-options">
+                            {models.map(m => (
+                                <button
+                                    key={m.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selectedModel === m.id}
+                                    className={`model-option ${selectedModel === m.id ? 'active' : ''}`}
+                                    onClick={() => handleModelChange(m.id)}
+                                    disabled={!m.available || isLoading}
+                                    title={!m.available ? 'Эта модель не настроена на сервере' : ''}
+                                >
+                                    <span className="model-option-label">{m.label}</span>
+                                    <span className="model-option-origin">{m.origin}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="chat-container glass-panel" style={{ position: 'relative' }}>

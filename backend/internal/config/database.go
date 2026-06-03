@@ -12,7 +12,8 @@ import (
 // и создаёт целевую базу данных, если она ещё не существует.
 func EnsureDatabaseExists(cfg *Config) {
 	// Подключаемся к дефолтной базе postgres
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=postgres port=%s sslmode=disable",
+	// Пароль квотим, чтобы пустой DB_PASSWORD не ломал парсинг DSN.
+	dsn := fmt.Sprintf("host=%s user=%s password='%s' dbname=postgres port=%s sslmode=disable",
 		cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBPort)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})

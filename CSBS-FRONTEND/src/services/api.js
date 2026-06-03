@@ -175,6 +175,14 @@ export const apiService = {
     async getUnavailableWorkspaces(startTime, endTime) {
         return this.fetchWithAuth(`/reservations/availability?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`);
     },
+    async getReservationPass(id) {
+        return this.fetchWithAuth(`/reservations/${id}/pass`);
+    },
+
+    // ── Analytics ──
+    async getAnalyticsDashboard() {
+        return this.fetchWithAuth('/analytics/dashboard');
+    },
 
     // ── Admin: Users ──
     async getAllUsers() {
@@ -199,10 +207,15 @@ export const apiService = {
     },
 
     // ── AI Chat ──
-    async sendAiMessage(message, history = []) {
+    async sendAiMessage(message, history = [], model) {
         return this.fetchWithAuth('/chat', {
             method: 'POST',
-            body: JSON.stringify({ message, history })
+            body: JSON.stringify({ message, history, model })
         });
+    },
+    async getAiModels() {
+        const res = await fetch(`${API_URL}/chat/models`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Failed to fetch AI models');
+        return res.json();
     }
 };

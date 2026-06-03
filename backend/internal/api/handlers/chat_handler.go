@@ -3,6 +3,7 @@ package handlers
 import (
 	"csbs/backend/internal/service"
 	"csbs/backend/pkg/gemini"
+	"csbs/backend/pkg/gigachat"
 	"csbs/backend/pkg/logger"
 	"encoding/base64"
 	"encoding/json"
@@ -15,6 +16,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// llmClient — единый интерфейс для любого LLM-провайдера (Gemini, GigaChat и т.п.)
+type llmClient interface {
+	GenerateContent(prompt string) (string, error)
+}
+
 const (
 	chatHistoryCookieName = "chat_history"
 	chatHistoryMaxMessages = 20
@@ -22,6 +28,7 @@ const (
 
 type ChatHandler struct {
 	geminiClient       *gemini.GeminiClient
+	gigachatClient     *gigachat.GigaChatClient
 	predictionService  service.PredictionService
 	reservationService service.ReservationService
 	workspaceService   service.WorkspaceService
@@ -30,6 +37,7 @@ type ChatHandler struct {
 
 func NewChatHandler(
 	geminiClient *gemini.GeminiClient,
+	gigachatClient *gigachat.GigaChatClient,
 	predictionService service.PredictionService,
 	reservationService service.ReservationService,
 	workspaceService service.WorkspaceService,
@@ -37,10 +45,30 @@ func NewChatHandler(
 ) *ChatHandler {
 	return &ChatHandler{
 		geminiClient:       geminiClient,
+		gigachatClient:     gigachatClient,
 		predictionService:  predictionService,
 		reservationService: reservationService,
 		workspaceService:   workspaceService,
 		tariffService:      tariffService,
+	}
+}
+
+// pickLLM выбирает клиента LLM по идентификатору модели из запроса.
+// Возвращает имя модели для логов и ошибку, если запрошенная модель не настроена.
+func (h *ChatHandler) pickLLM(modelID string) (llmClient, string, error) {
+	switch strings.ToLower(strings.TrimSpace(modelID)) {
+	case "gigachat":
+		if h.gigachatClient == nil {
+			return nil, "", fmt.Errorf("GigaChat не настроен на сервере (отсутствует GIGACHAT_AUTH_KEY)")
+		}
+		return h.gigachatClient, "gigachat", nil
+	case "", "gemini":
+		if h.geminiClient == nil {
+			return nil, "", fmt.Errorf("Gemini не настроен на сервере")
+		}
+		return h.geminiClient, "gemini", nil
+	default:
+		return nil, "", fmt.Errorf("неизвестная модель: %s", modelID)
 	}
 }
 
@@ -50,7 +78,25 @@ func (h *ChatHandler) Routes() http.Handler {
 	r.Post("/", h.handleChat)
 	r.Get("/history", h.getHistory)
 	r.Delete("/history", h.clearHistory)
+	r.Get("/models", h.listModels)
 	return r
+}
+
+// listModels отдаёт список настроенных на сервере LLM-моделей, чтобы фронт мог
+// показать переключатель и не предлагать недоступные варианты.
+func (h *ChatHandler) listModels(w http.ResponseWriter, r *http.Request) {
+	type modelInfo struct {
+		ID        string `json:"id"`
+		Label     string `json:"label"`
+		Origin    string `json:"origin"`
+		Available bool   `json:"available"`
+	}
+	models := []modelInfo{
+		{ID: "gigachat", Label: "GigaChat", Origin: "отечественная", Available: h.gigachatClient != nil},
+		{ID: "gemini", Label: "Gemini", Origin: "западная", Available: h.geminiClient != nil},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models)
 }
 
 // readHistoryCookie декодирует base64+JSON историю из HttpOnly куки
@@ -124,6 +170,7 @@ type chatMessage struct {
 type chatRequest struct {
 	Message string        `json:"message"`
 	History []chatMessage `json:"history"`
+	Model   string        `json:"model,omitempty"`
 }
 
 type bookingInfo struct {
@@ -211,6 +258,12 @@ func (h *ChatHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := tryExtractUserID(r)
+
+	llm, modelName, err := h.pickLLM(req.Model)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Собираем контекст для Gemini: загрузка, воркспейсы, тарифы
 	workload := h.predictionService.GetWeeklyWorkload()
@@ -327,20 +380,20 @@ func (h *ChatHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	fullMessage := strings.Join(conversationParts, "\n\n")
 
-	// Отправляем в Gemini
-	rawReply, err := h.geminiClient.GenerateContent(fullMessage)
+	// Отправляем в выбранную модель (Gemini или GigaChat)
+	rawReply, err := llm.GenerateContent(fullMessage)
 	if err != nil {
-		logger.Error.Printf("Chat API Error: %v", err)
+		logger.Error.Printf("Chat API Error (model=%s): %v", modelName, err)
 		http.Error(w, "Failed to generate content: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Пытаемся распарсить JSON-ответ от Gemini
+	// Пытаемся распарсить JSON-ответ от модели
 	cleanedReply := cleanJSON(rawReply)
 	var action geminiAction
 	if err := json.Unmarshal([]byte(cleanedReply), &action); err != nil {
-		// Gemini вернул обычный текст вместо JSON — отдаём как есть
-		logger.Warn.Printf("Chat: Gemini returned non-JSON, falling back to plain text: %v", err)
+		// Модель вернула обычный текст вместо JSON — отдаём как есть
+		logger.Warn.Printf("Chat: model=%s returned non-JSON, falling back to plain text: %v", modelName, err)
 		res := chatResponse{Reply: rawReply}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(res)

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     User, Calendar, Settings, Users, ShieldAlert,
-    CreditCard, Building2, Terminal, Trash2, FileText
+    CreditCard, Building2, Terminal, Trash2, FileText, QrCode, BarChart3
 } from 'lucide-react';
 import { maskEmail, maskPhone } from '../utils/formatters';
 import { Navigate, useNavigate } from 'react-router-dom';
@@ -11,6 +11,8 @@ import './Profile.css';
 import '../components/profile/ProfileTabs.css';
 
 // Tab components
+import ReservationQrModal from '../components/profile/ReservationQrModal';
+import AnalyticsDashboard from '../components/profile/AnalyticsDashboard';
 import BookingsManagement from '../components/profile/BookingsManagement';
 import WorkspacesManagement from '../components/profile/WorkspacesManagement';
 import TariffsManagement from '../components/profile/TariffsManagement';
@@ -37,6 +39,7 @@ const NAV_ITEMS = [
 
     // Admin section
     { id: '_admin_divider', divider: true, label: 'Администрирование', minRole: 1 },
+    { id: 'analytics',     label: 'Аналитика и прогноз',        icon: BarChart3, minRole: 1 },
     { id: 'bookings-mgmt', label: 'Управление бронированиями', icon: FileText,  minRole: 1 },
     { id: 'workspaces',    label: 'Рабочие места',              icon: Building2, minRole: 1 },
     { id: 'tariffs',       label: 'Тарифы и услуги',            icon: CreditCard,minRole: 1 },
@@ -60,6 +63,7 @@ export default function Profile() {
     const [reservations, setReservations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('profile');
+    const [qrReservationId, setQrReservationId] = useState(null);
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -135,7 +139,9 @@ export default function Profile() {
     );
 
     /* ── User tab: Мои бронирования ── */
-    const renderMyBookings = () => (
+    const renderMyBookings = () => {
+        const now = Date.now();
+        return (
         <div className="profile-card glass-panel fade-in">
             <h2><Calendar size={22} className="text-accent" /> Мои бронирования</h2>
             <table className="mock-table">
@@ -146,6 +152,7 @@ export default function Profile() {
                         <th>Дата конца</th>
                         <th>Тариф</th>
                         <th>Статус</th>
+                        <th>Пропуск</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -153,6 +160,7 @@ export default function Profile() {
                         const placeName = res.Workspace?.NameOrNumber || res.Workspace?.Name || `Место #${res.WorkspaceID}`;
                         const loc = res.Workspace?.Location;
                         const locLine = loc ? [loc.Name, loc.Address].filter(Boolean).join(', ') : null;
+                        const isActive = res.Status === 'подтверждено' && new Date(res.EndTime).getTime() > now;
                         return (
                         <tr key={res.ID || i}>
                             <td>
@@ -167,23 +175,39 @@ export default function Profile() {
                                     {res.Status || '—'}
                                 </span>
                             </td>
+                            <td>
+                                {isActive ? (
+                                    <button
+                                        type="button"
+                                        className="btn-qr"
+                                        onClick={() => setQrReservationId(res.ID)}
+                                        title="Показать QR-пропуск для входа в коворкинг"
+                                    >
+                                        <QrCode size={14} /> QR-код
+                                    </button>
+                                ) : (
+                                    <span className="text-muted" style={{ fontSize: '0.85rem' }}>—</span>
+                                )}
+                            </td>
                         </tr>
                         );
                     }) : (
                         <tr>
-                            <td colSpan="5" className="empty-state">У вас пока нет бронирований.</td>
+                            <td colSpan="6" className="empty-state">У вас пока нет бронирований.</td>
                         </tr>
                     )}
                 </tbody>
             </table>
         </div>
-    );
+        );
+    };
 
     /* ── tab router ── */
     const renderContent = () => {
         switch (activeTab) {
             case 'profile':        return renderProfileTab();
             case 'my-bookings':    return renderMyBookings();
+            case 'analytics':      return <AnalyticsDashboard />;
             case 'bookings-mgmt':  return <BookingsManagement />;
             case 'workspaces':     return <WorkspacesManagement />;
             case 'tariffs':        return <TariffsManagement />;
@@ -237,6 +261,13 @@ export default function Profile() {
                     {renderContent()}
                 </main>
             </div>
+
+            {qrReservationId && (
+                <ReservationQrModal
+                    reservationId={qrReservationId}
+                    onClose={() => setQrReservationId(null)}
+                />
+            )}
         </div>
     );
 }

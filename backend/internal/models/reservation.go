@@ -22,4 +22,9 @@ type Reservation struct {
 	Status    string    `gorm:"size:255;not null"`
 	CreatedAt time.Time `gorm:"not null"`
 	UpdatedAt time.Time `gorm:"not null"`
+
+	// Флаги напоминаний на почту: за сутки и за 3 часа до начала брони.
+	// Нужны, чтобы крон-сервис не слал одно и то же письмо повторно.
+	Notified24h bool `gorm:"column:notified_24h;default:false"`
+	Notified3h  bool `gorm:"column:notified_3h;default:false"`
 }
