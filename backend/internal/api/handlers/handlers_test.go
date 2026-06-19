@@ -51,6 +51,8 @@ func (m *mockUserService) GetUserByID(id uint) (*models.User, error)     { retur
 func (m *mockUserService) GetAllUsers() ([]models.User, error)           { return nil, m.err }
 func (m *mockUserService) UpdateUserStatus(id uint, status string) error { return m.err }
 func (m *mockUserService) UpdateUserRole(id uint, roleName string) error { return m.err }
+func (m *mockUserService) ForgotPassword(userEmail string) error         { return m.err }
+func (m *mockUserService) ResetPassword(token, newPassword string) error { return m.err }
 
 var _ service.UserService = (*mockUserService)(nil)
 
@@ -71,6 +73,9 @@ func (m *mockReservationService) GetUserReservations(userID uint) ([]models.Rese
 }
 func (m *mockReservationService) GetAllReservations() ([]models.Reservation, error) {
 	return m.reservations, m.err
+}
+func (m *mockReservationService) GetReservationByID(id uint) (*models.Reservation, error) {
+	return m.reservation, m.err
 }
 func (m *mockReservationService) UpdateReservation(id, wsID, tariffID uint, s, e time.Time, status string, actor uint) (*models.Reservation, error) {
 	return m.reservation, m.err

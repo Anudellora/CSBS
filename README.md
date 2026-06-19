@@ -1,1102 +1,149 @@
-# README1 — Информация для генерации раздела «О программе в целом» курсовой работы
+# 🏢 CSBS — Coworking Space Booking System
+
+> Веб-приложение для онлайн-бронирования рабочих мест в коворкинге: каталог мест, бронирование без коллизий, QR-пропуск, email-напоминания, дашборд аналитики с ML-прогнозом загрузки и ИИ-ассистент на выбор из двух LLM.
+
+<p>
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
+  <img alt="Kafka" src="https://img.shields.io/badge/Apache%20Kafka-3.7-231F20?logo=apachekafka&logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker%20Compose-v2-2496ED?logo=docker&logoColor=white">
+</p>
 
 ---
 
-## 1. О программе
+## ✨ Возможности
 
-### 1.1. Что делает программа и какую задачу решает
+- **Бронирование без двойных броней** — серверная проверка пересечений интервалов времени.
+- **Трёхуровневая ролевая модель** (`user` / `cowork_admin` / `system_admin`) на JWT + middleware проверки ролей.
+- **QR-пропуск** для входа — подписанный JWT, действительный до конца брони (рендер на клиенте через `qrcode.react`).
+- **Email-напоминания** о ближайшей броне за 24 ч и за 3 ч (фоновый сервис, защита от дублей).
+- **Дашборд аналитики** для админов: KPI, фактическая загрузка за 14 дней, ML-прогноз на неделю, распределение по локациям и категориям, текстовая рекомендация LLM.
+- **Гибридный ИИ-модуль:** локальная ML-модель (LightGBM) прогнозирует загрузку → LLM генерирует рекомендованную цену и сообщение клиенту. ИИ-ассистент работает на выбор из **Google Gemini** или **Сбер GigaChat**.
+- **Event-driven через Apache Kafka** — события `booking.*` публикуются в топик и независимо обрабатываются консьюмерами (нотификации + зеркалирование аудита).
+- **Лицензирование платных функций** — офлайн-проверка подписанного JWT (**Ed25519**): без действующего ключа защищённые эндпоинты отвечают `402 Payment Required`.
+- **Журнал аудита** действий администраторов.
 
-**CSBS (Coworking Space Booking System)** — это веб-приложение для онлайн-бронирования рабочих мест в коворкинге.
+## 🧱 Архитектура
 
-Программа решает следующие задачи:
+Слоистая архитектура бэкенда: `Handler → Service → Repository → PostgreSQL`.
 
-- автоматизирует процесс бронирования рабочих мест (столы, переговорные комнаты, опен-спейсы) в одном или нескольких коворкингах;
-- избавляет администрацию коворкинга от ручного учёта брони в таблицах/мессенджерах;
-- предоставляет клиенту удобный личный кабинет: регистрация, просмотр доступных мест, выбор тарифа, просмотр истории бронирований;
-- исключает «двойные брони» за счёт серверной проверки пересечений интервалов времени;
-- автоматически шлёт пользователю email-напоминания о ближайшей броне (за сутки и за 3 часа до начала);
-- выдаёт клиенту **QR-пропуск** для входа в коворкинг (подписанный JWT-токен, действительный до конца брони);
-- даёт администратору коворкинга инструменты для управления каталогом мест, тарифами, локациями, услугами и просмотра журнала действий;
-- даёт администратору и системному администратору **дашборд аналитики**: фактическая загрузка за 14 дней, ML-прогноз на неделю, распределение по локациям/категориям, текстовая рекомендация LLM на текущий день;
-- даёт системному администратору инструменты для управления пользователями и ролями;
-- даёт менеджменту прогнозную аналитику по загруженности на каждый день недели и динамическую рекомендацию цены при помощи модуля ИИ;
-- предоставляет пользователю выбор между двумя LLM (Google Gemini и Сбер GigaChat) для общения с ИИ-ассистентом;
-- публикует события жизненного цикла броней в **Apache Kafka** (`booking.events`), что позволяет асинхронно рассылать письма, вести параллельный аудит и подключать внешние интеграции.
+```
+┌───────────────┐      REST/JWT      ┌─────────────────────────────┐
+│ React + Vite  │ ◄────────────────► │  Go API (go-chi)            │
+│ (nginx)       │                    │  handlers → services → repo │
+└───────────────┘                    └───────┬───────────┬─────────┘
+                                             │           │
+                               ┌─────────────▼──┐  ┌──────▼────────┐
+                               │  PostgreSQL    │  │ Apache Kafka  │
+                               │  (GORM)        │  │ booking.events│
+                               └────────────────┘  └──────┬────────┘
+                                                          │ consumers
+   ┌───────────────┐  ┌────────────────┐         ┌────────▼────────┐
+   │ LightGBM (ML) │  │ Gemini /        │         │ notifications + │
+   │ прогноз загр. │  │ GigaChat (LLM)  │         │ audit-mirror    │
+   └───────────────┘  └────────────────┘         └─────────────────┘
+```
 
-Предметная область — **сфера услуг (коворкинг / аренда рабочих мест)**.
+## 🛠️ Технологический стек
 
-### 1.2. Роли пользователей
-
-В системе реализована **трёхуровневая ролевая модель** (хранится в таблице `Roles`, у пользователя есть внешний ключ `RoleID`):
-
-| Код роли | Название | Возможности |
-|---|---|---|
-| `user` | Обычный пользователь (клиент) | Регистрация, авторизация, просмотр каталога рабочих мест и тарифов, создание и просмотр **своих** бронирований, общение с ИИ-ассистентом, просмотр прогноза загруженности |
-| `cowork_admin` | Администратор коворкинга | Всё, что может пользователь, плюс: управление рабочими местами (CRUD), категориями, локациями, тарифами, услугами; управление бронированиями (изменение статусов); просмотр журнала аудита |
-| `system_admin` | Системный администратор | Всё, что может администратор коворкинга, плюс: управление пользователями (просмотр, смена роли, блокировка), управление ролями, полный доступ к журналу аудита |
-
-Доступ к защищённым эндпоинтам реализован через **JWT-аутентификацию** и **middleware проверки ролей**.
-
-### 1.3. Модуль ИИ / машинного обучения
-
-В проекте реализован **гибридный модуль ИИ**, состоящий из трёх компонентов: одной локальной ML-модели и двух взаимозаменяемых внешних LLM.
-
-**1. Локальная ML-модель (регрессия) — LightGBM**
-- **Файл обучения:** `ml/train_model.py` (Python, библиотеки `lightgbm`, `pandas`, `numpy`).
-- **Файл весов модели:** `backend/workload_model.txt` (загружается на старте сервера и используется через Go-библиотеку `dmitryikh/leaves`).
-- **Что прогнозирует:** **процент загруженности коворкинга (от 0 до 100%) на конкретный день недели**.
-- **Тип задачи:** регрессия (`objective: regression`, метрика — RMSE).
-- **Признаки (features):**
-  - `day_of_week` — день недели (0 = Пн … 6 = Вс), категориальный признак;
-  - `is_weekend` — флаг выходного дня (0/1), категориальный признак.
-- **Обучающая выборка:** 1000 синтетически сгенерированных дней с реалистичной логикой (Вт–Чт ≈ 85%, Пн ≈ 75%, Пт ≈ 60%, выходные ≈ 20%) + нормальный шум.
-- **Параметры обучения:** `learning_rate=0.05`, `num_leaves=15`, `num_boost_round=150`.
-
-**2. Внешний LLM #1 — Google Gemini API**
-- **Клиент:** `backend/pkg/gemini` (через прокси/кастомный DNS — обход геоблока).
-- **Что делает:**
-  - на основе процента загрузки от ML-модели генерирует **рекомендованную цену** на рабочее место (повышенная при загрузке >75%, базовая при средней, скидка при <45%);
-  - формирует **дружелюбное сообщение клиенту** с обоснованием цены (вкладка «Аналитика и прогноз» в админ-кабинете);
-  - может выступать как backend для ИИ-ассистента в чате.
-- **Формат ответа:** строгий JSON `{ day, expected_workload_percent, recommended_price_rub, message }`.
-
-**3. Внешний LLM #2 — Сбер GigaChat API**
-- **Клиент:** `backend/pkg/gigachat` (OAuth2-токен по `GIGACHAT_AUTH_KEY`, scope `GIGACHAT_API_PERS/B2B/CORP`).
-- **Зачем второй LLM:** независимость от геоблоков Gemini, отечественный fallback, возможность сравнить качество/латенси на одинаковых промптах.
-- **Где используется:** ИИ-ассистент чата. Пользователь сам выбирает модель в шапке `/ai-assistant` через переключатель «Модель: Gemini / GigaChat». Выбор сохраняется в `localStorage` и передаётся в `POST /api/chat` (поле `model`).
-- **Динамический список доступных моделей:** `GET /api/chat/models` отдаёт `[{id, label, origin, available}]`, отмечая `available: false` для моделей, у которых нет ключа в `.env`. Фронт скрывает недоступные варианты, чтобы избежать ошибок.
-- **Единый интерфейс:** оба клиента реализуют `interface { GenerateContent(prompt string) (string, error) }`, что позволяет в `chat_handler.go` выбирать провайдера по строковому ID без ветвлений в бизнес-логике.
-
-**Эндпоинты ИИ:**
-- `GET /api/predictions/workload?day=monday` — прогноз ML на день (используется аналитикой);
-- `GET /api/chat/models` — список доступных LLM-моделей;
-- `POST /api/chat` — отправка сообщения в чат с выбором модели;
-- `GET /api/analytics/dashboard` (только для админов) — агрегированный дашборд: KPI, ML-прогноз на 7 дней, фактическая загрузка за 14 дней, распределение броней по локациям/категориям, текстовая рекомендация LLM на сегодня.
-
-### 1.4. Дополнительные модули
-
-**Email-напоминания о бронях.** Фоновый `ReminderService` раз в минуту опрашивает БД и шлёт письма за 24 ч и за 3 ч до начала каждой брони (статус «подтверждено», старт ещё впереди). Защита от дублей — два булевых флага `notified_24h` / `notified_3h` в таблице `reservations`. Если SMTP не сконфигурирован — сервис тихо выключается с предупреждением в логе, остальное приложение работает.
-
-**QR-пропуск для входа.** Для каждой активной брони в личном кабинете доступна кнопка «QR-код». По нажатию вызывается `GET /api/reservations/{id}/pass`, который проверяет принадлежность брони пользователю + что бронь не отменена и не завершена, и подписывает JWT с claims `{purpose: "checkin", reservation_id, user_id, workspace_id, exp = EndTime}`. Фронт рисует QR-код локально через `qrcode.react` (SVG, масштабируется без потерь). Подпись делается тем же секретом, что и auth-токены, поэтому сканер на входе может валидировать пропуск тем же middleware.
-
-**Дашборд аналитики для администраторов.** Новая вкладка «Аналитика и прогноз» в `Profile.jsx` (видна для `cowork_admin` и `system_admin`). Содержит 3 KPI-карточки (загрузка сегодня, броней сегодня, средний ML-прогноз за неделю), bar-chart ML-прогноза на 7 дней, line-chart фактической загрузки за 14 дней, donut по категориям, horizontal-bar по локациям, и LLM-инсайт от Gemini. Графики — `recharts`, тематизированы под акцент сайта `#00a6c0`.
-
-**Apache Kafka — событийная шина.** События `booking.created` / `booking.updated` / `booking.cancelled` публикуются в топик `booking.events` из `ReservationService`. Два независимых консьюмера (разные group ID) обрабатывают каждое сообщение: `csbs-notifications` шлёт письмо «Бронь подтверждена», `csbs-audit-mirror` зеркалит запись в `audit_logs`. Детали — в §3.8.
-
----
-
-## 2. О данных
-
-### 2.1. Основные сущности БД
-
-СУБД — **PostgreSQL**, ORM — **GORM** (Go). Все модели расположены в `backend/internal/models/`.
-
-| Сущность (таблица) | Назначение | Ключевые поля |
-|---|---|---|
-| **User** (`users`) | Пользователь системы (клиент или сотрудник) | `FullName`, `Email` (unique), `Phone`, `PasswordHash` (bcrypt), `Status`, `RoleID` → Role |
-| **Role** (`roles`) | Роль пользователя | `Name` (unique): `user` / `cowork_admin` / `system_admin` |
-| **Location** (`locations`) | Физическая локация коворкинга (филиал) | `Name` (unique), `Address` |
-| **WorkspaceCategory** (`workspace_categories`) | Категория рабочего места (стол, переговорная, опен-спейс и т.д.) | `Name` (unique), `Description` |
-| **Workspace** (`workspaces`) | Конкретное рабочее место | `NameOrNumber`, `Capacity`, `IsActive`, `MapCoordinates`, `CategoryID` → WorkspaceCategory, `LocationID` → Location, M2M со `Service` |
-| **Service** (`services`) | Дополнительная услуга/удобство (Wi-Fi, монитор, кофе и т.д.) | `Name` (unique), `Description` |
-| **WorkspaceService** (`workspace_services`) | Связующая таблица M2M «рабочее место ↔ услуга» | `WorkspaceID`, `ServiceID` |
-| **Tariff** (`tariffs`) | Тариф (цена за определённый интервал) | `Name`, `Price`, `DurationMinutes`, `LocationID` → Location |
-| **Reservation** (`reservations`) | Бронирование | `UserID` → User, `WorkspaceID` → Workspace, `TariffID` → Tariff, `StartTime`, `EndTime`, `Status`, `CreatedAt`, `UpdatedAt`, `Notified24h` / `Notified3h` (флаги отправленных email-напоминаний) |
-| **AuditLog** (`audit_logs`) | Запись журнала действий | `UserID` → User, `Action`, `EntityType`, `EntityID`, `Timestamp` |
-
-Все таблицы наследуют `gorm.Model` (поля `ID`, `CreatedAt`, `UpdatedAt`, `DeletedAt` — soft delete).
-
-### 2.2. Справочники (классификаторы)
-
-Реализованные справочники в системе:
-
-- **Roles** — справочник ролей пользователей: `user`, `cowork_admin`, `system_admin` (константы в `models/role.go`).
-- **WorkspaceCategories** — справочник категорий рабочих мест (стол, переговорная, опен-спейс — наполняется администратором).
-- **Locations** — справочник филиалов/локаций коворкинга.
-- **Services** — справочник дополнительных услуг и удобств (Wi-Fi, монитор, проектор, кофе и т.д.).
-- **Tariffs** — справочник тарифов с ценой и длительностью.
-- **Status пользователя** — строковое поле `User.Status` (по умолчанию `активирован`; возможные значения: `активирован`, `заблокирован` и т.п.).
-- **Status бронирования** — строковое поле `Reservation.Status` (например: `активна`, `завершена`, `отменена`).
-
-### 2.3. Журналирование действий (audit log)
-
-В системе **реализован журнал аудита** — таблица `AuditLog`:
-
-- фиксируется `UserID` (кто совершил действие), `Action` (что сделано — например, `CREATE`, `UPDATE`, `DELETE`, `LOGIN`), `EntityType` (над какой сущностью — `Workspace`, `Reservation`, `Tariff` и т.д.), `EntityID`, `Timestamp`;
-- запись производится сервисным слоем `audit_service.go`;
-- просмотр доступен через `GET /api/auditlogs` только администраторам;
-- в первую очередь логируются действия менеджеров (создание/изменение/удаление сущностей и управление пользователями), что важно для разбора инцидентов и контроля.
-
-### 2.4. Резервное копирование
-
-Резервное копирование осуществляется **средствами СУБД PostgreSQL** (`pg_dump` / `pg_basebackup`) на стороне инфраструктуры — отдельной программной реализации внутри приложения не требуется, т.к. это стандартная функциональность СУБД. Рекомендуемая стратегия:
-
-- регулярные ежедневные дампы (`pg_dump`) с хранением N последних копий;
-- хранение дампов на отдельном носителе/в облаке;
-- периодическая проверка восстановления.
-
-В рамках развёртывания эта стратегия **автоматизирована отдельным контейнером `postgres-backup`** в `docker-compose.yml` (раз в сутки `pg_dump` с gzip-сжатием и ротацией 7 дней / 4 недель / 6 месяцев) — детали и команда восстановления приведены в §3.7.4.
-
----
-
-## 3. Дополнительные материалы
-
-### 3.1. Технологический стек
-
-| Слой | Технология |
+| Слой | Технологии |
 |---|---|
-| Backend язык | **Go 1.21+** |
-| HTTP-роутер | `go-chi/chi` v5 |
-| ORM | **GORM** |
-| СУБД | **PostgreSQL** |
-| Аутентификация | JWT (`golang-jwt`) — для auth и для подписи QR-пропусков |
-| Хэширование паролей | bcrypt |
-| Email | SMTP (`net/smtp`) — STARTTLS на 587, TLS на 465 |
-| Событийная шина | **Apache Kafka** (bitnami/kafka:3.7 в KRaft-режиме) |
-| Kafka-клиент в Go | `segmentio/kafka-go` v0.4 (чистый Go, без CGO) |
-| ML (обучение) | Python, **LightGBM**, pandas, numpy |
-| ML (инференс в Go) | `dmitryikh/leaves` |
-| LLM #1 | **Google Gemini API** (через прокси/кастомный DNS) |
-| LLM #2 | **Сбер GigaChat API** (OAuth2) |
-| Frontend | React 19 + Vite |
-| Графики (дашборд) | **recharts** (SVG) |
-| QR-коды (пропуск) | **qrcode.react** (SVG) |
-| Веб-сервер для статики | **nginx 1.27 (alpine)** |
-| Контейнеризация | **Docker** (multi-stage сборка) |
-| Оркестрация локального окружения | **Docker Compose v2** |
+| **Backend** | Go 1.23, `go-chi/chi` v5, GORM, JWT (`golang-jwt`), bcrypt |
+| **БД** | PostgreSQL 16 |
+| **Событийная шина** | Apache Kafka (KRaft), `segmentio/kafka-go` |
+| **ML** | LightGBM (обучение на Python), инференс в Go через `dmitryikh/leaves` |
+| **LLM** | Google Gemini API, Сбер GigaChat API |
+| **Лицензирование** | Подписанный JWT, Ed25519 (`crypto/ed25519`) |
+| **Frontend** | React 19, Vite 7, recharts, qrcode.react |
+| **Инфраструктура** | Docker (multi-stage), Docker Compose, nginx |
 
-### 3.2. Структура проекта (актуальная)
+## 🚀 Быстрый старт
+
+### Через Docker Compose (рекомендуется)
+
+```bash
+# 1. Подготовить переменные окружения
+cp backend/.env.example backend/.env
+#    отредактируйте backend/.env (как минимум DB_PASSWORD; ключи LLM/SMTP — опционально)
+
+# 2. Поднять всё окружение: postgres + kafka + backend + frontend
+docker compose --env-file backend/.env up --build
+```
+
+После старта:
+- **Frontend** — http://localhost:3000
+- **Backend API** — http://localhost:8080
+
+### Локальный запуск (без Docker)
+
+```bash
+# Backend (нужны Go 1.23+ и запущенный PostgreSQL)
+cd backend
+go run ./cmd/server
+
+# Frontend (нужен Node.js 18+)
+cd CSBS-FRONTEND
+npm install
+npm run dev          # http://localhost:5173
+```
+
+> Все секреты читаются из `backend/.env`. В git коммитится только шаблон `backend/.env.example` — реальный `.env` игнорируется.
+
+## ⚙️ Конфигурация
+
+Ключевые переменные окружения (полный список и комментарии — в `backend/.env.example`):
+
+| Переменная | Назначение |
+|---|---|
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Подключение к PostgreSQL |
+| `SERVER_PORT` | Порт HTTP-сервера (по умолчанию `8080`) |
+| `GEMINI_API_KEY` | Ключ Google Gemini (ИИ-ассистент, рекомендация цены) |
+| `GIGACHAT_AUTH_KEY` | Авторизация Сбер GigaChat (альтернативный LLM) |
+| `SMTP_*`, `APP_URL` | Отправка email-напоминаний и ссылок |
+| `KAFKA_BROKERS` | Брокеры Kafka. Пусто → событийная шина отключается (graceful degradation) |
+| `LICENSE_PUBLIC_KEY`, `LICENSE_KEY` | Лицензирование платных функций (Ed25519) |
+
+Все интеграции спроектированы с **graceful degradation**: при отсутствии ключа LLM / SMTP / Kafka соответствующая функция отключается, а остальное приложение продолжает работать.
+
+## 🧪 Тестирование
+
+```bash
+# Backend — unit-тесты
+cd backend && go test ./...
+
+# Frontend — unit-тесты (Vitest) и e2e (Playwright)
+cd CSBS-FRONTEND
+npm run test
+npx playwright test
+```
+
+## 📁 Структура проекта
 
 ```
 CSBS/
 ├── backend/
-│   ├── cmd/server/main.go              # Точка входа: сервер + ReminderService + Kafka producer/consumers
+│   ├── cmd/server/        # точка входа: API + ReminderService + Kafka + лицензии
+│   ├── cmd/licensegen/    # утилита вендора: генерация ключей и выпуск лицензий
 │   ├── internal/
-│   │   ├── api/
-│   │   │   ├── handlers/               # HTTP-обработчики
-│   │   │   │   ├── admin_handler.go
-│   │   │   │   ├── amenity_handler.go
-│   │   │   │   ├── analytics_handler.go    # Дашборд для админов
-│   │   │   │   ├── auditlog_handler.go
-│   │   │   │   ├── auth_middleware.go
-│   │   │   │   ├── category_handler.go
-│   │   │   │   ├── chat_handler.go         # ИИ-ассистент (Gemini + GigaChat)
-│   │   │   │   ├── location_handler.go
-│   │   │   │   ├── prediction_handler.go   # Прогноз загруженности
-│   │   │   │   ├── reservation_handler.go  # включает GET /reservations/{id}/pass (QR-пропуск)
-│   │   │   │   ├── tariff_handler.go
-│   │   │   │   ├── user_handler.go
-│   │   │   │   └── workspace.go
-│   │   │   └── middleware/
-│   │   ├── config/
-│   │   ├── models/                     # GORM-модели
-│   │   │   ├── auditlog.go
-│   │   │   ├── Location.go
-│   │   │   ├── reservation.go              # +Notified24h / +Notified3h
-│   │   │   ├── role.go
-│   │   │   ├── service.go
-│   │   │   ├── tariff.go
-│   │   │   ├── user.go
-│   │   │   ├── workspace.go
-│   │   │   └── workspace_service.go
-│   │   ├── repository/                 # Слой доступа к БД
-│   │   └── service/                    # Бизнес-логика
-│   │       ├── analytics_service.go        # Сбор KPI/прогноза/распределений для дашборда
-│   │       ├── booking_event_consumers.go  # Kafka-консьюмеры: notifications + audit-mirror
-│   │       ├── prediction_service.go       # Интеграция LightGBM + Gemini
-│   │       ├── reminder_service.go         # Крон-сервис email-напоминаний за 24ч / 3ч
-│   │       └── reservation_service.go      # Публикует события в Kafka после Create/Update/Delete
-│   ├── pkg/
-│   │   ├── email/                      # SMTP + шаблоны (reset, confirmation, reminder)
-│   │   ├── gemini/                     # Клиент Gemini API
-│   │   ├── gigachat/                   # Клиент GigaChat (OAuth2)
-│   │   ├── kafka/                      # Producer + Consumer wrappers + схемы событий
-│   │   │   ├── events.go                   # Топик booking.events + BookingEvent payload
-│   │   │   ├── producer.go                 # PublishAsync (fire-and-forget)
-│   │   │   └── consumer.go                 # StartBookingConsumer(ctx, brokers, groupID, handler)
-│   │   └── logger/
-│   ├── migrations/
-│   ├── workload_model.txt              # Веса обученной LightGBM-модели
-│   ├── Dockerfile                      # Multi-stage сборка backend
-│   ├── .dockerignore
-│   ├── .env                            # Реальные секреты (не в git)
-│   └── .env.example                    # Шаблон env-переменных (в git)
-├── ml/
-│   └── train_model.py                  # Скрипт обучения LightGBM
-├── CSBS-FRONTEND/                      # React + Vite фронтенд
-│   ├── src/components/profile/
-│   │   ├── AnalyticsDashboard.jsx          # Дашборд с графиками (recharts)
-│   │   └── ReservationQrModal.jsx          # Модалка с QR-пропуском (qrcode.react)
-│   ├── Dockerfile                      # Multi-stage сборка фронта (nginx)
-│   ├── nginx.conf                      # Конфиг nginx (SPA-fallback, gzip, кэш)
-│   └── .dockerignore
-├── backups/                            # Дампы pg_dump (генерируются, не в git)
-└── docker-compose.yml                  # Оркестрация: postgres + kafka + backend + frontend + backup
+│   │   ├── api/           # HTTP-обработчики и middleware
+│   │   ├── models/        # GORM-модели
+│   │   ├── repository/    # доступ к БД
+│   │   └── service/       # бизнес-логика
+│   └── pkg/               # gemini, gigachat, kafka, license, email, logger
+├── CSBS-FRONTEND/         # React + Vite (nginx в проде)
+├── ml/train_model.py      # обучение LightGBM-модели
+└── docker-compose.yml     # postgres + kafka + backend + frontend + backup
 ```
 
-### 3.3. Описание ER-диаграммы (текстом)
+## 📸 Скриншоты
 
-```
-                 ┌──────────┐
-                 │   Role   │
-                 └────┬─────┘
-                      │ 1
-                      │
-                      │ *
-                 ┌────▼─────┐         ┌──────────────┐
-                 │   User   │◄────────┤   AuditLog   │
-                 └────┬─────┘ 1     * └──────────────┘
-                      │ 1
-                      │
-                      │ *
-              ┌───────▼────────┐
-              │  Reservation   │
-              └─┬────────┬─────┘
-                │ *      │ *
-                │        │
-        ┌───────▼──┐  ┌──▼────────┐
-        │ Tariff   │  │ Workspace │
-        └────┬─────┘  └─┬────┬────┘
-             │ *        │ *  │ *
-             │          │    │
-        ┌────▼─────┐    │    │   ┌────────────────────┐
-        │ Location │◄───┘    │   │ WorkspaceCategory  │
-        └──────────┘         │   └────────────────────┘
-                             │ *           ▲
-                             │             │ *
-                             │             │
-                             │   M2M через workspace_services
-                             ▼
-                       ┌───────────┐
-                       │  Service  │
-                       └───────────┘
-```
-
-Связи:
-- `Role 1 ── * User`
-- `User 1 ── * Reservation`
-- `User 1 ── * AuditLog`
-- `Workspace 1 ── * Reservation`
-- `Tariff 1 ── * Reservation`
-- `Location 1 ── * Workspace`
-- `Location 1 ── * Tariff`
-- `WorkspaceCategory 1 ── * Workspace`
-- `Workspace * ──M2M── * Service` (через `WorkspaceService`)
-
-### 3.4. Фрагмент кода: модели БД (GORM)
-
-```go
-// User
-type User struct {
-    gorm.Model
-    RoleID       *uint
-    Role         Role   `gorm:"foreignKey:RoleID"`
-    FullName     string `gorm:"size:255;not null"`
-    Email        string `gorm:"size:255;not null;unique"`
-    Phone        string `gorm:"size:50"`
-    PasswordHash string `gorm:"size:255;not null"`
-    Status       string `gorm:"size:50;default:'активирован'"`
-}
-
-// Role
-type Role struct {
-    gorm.Model
-    Name string `gorm:"size:255;not null;unique"`
-}
-const (
-    RoleUser        = "user"
-    RoleCoworkAdmin = "cowork_admin"
-    RoleSystemAdmin = "system_admin"
-)
-
-// Workspace
-type WorkspaceCategory struct {
-    gorm.Model
-    Name        string `gorm:"size:255;not null;unique"`
-    Description string `gorm:"size:255;not null"`
-}
-type Workspace struct {
-    gorm.Model
-    CategoryID     uint
-    Category       WorkspaceCategory `gorm:"foreignKey:CategoryID"`
-    LocationID     uint
-    Location       Location `gorm:"foreignKey:LocationID"`
-    NameOrNumber   string    `gorm:"size:100;not null"`
-    Capacity       int       `gorm:"not null"`
-    IsActive       bool      `gorm:"not null;default:true"`
-    MapCoordinates string    `gorm:"size:255"`
-    Services       []Service `gorm:"many2many:workspace_services;"`
-}
-
-// Reservation
-type Reservation struct {
-    gorm.Model
-    UserID      uint
-    User        User      `gorm:"foreignKey:UserID"`
-    WorkspaceID uint
-    Workspace   Workspace `gorm:"foreignKey:WorkspaceID"`
-    TariffID    uint
-    Tariff      Tariff    `gorm:"foreignKey:TariffID"`
-    StartTime   time.Time `gorm:"not null"`
-    EndTime     time.Time `gorm:"not null"`
-    Status      string    `gorm:"size:255;not null"`
-    CreatedAt   time.Time `gorm:"not null"`
-    UpdatedAt   time.Time `gorm:"not null"`
-
-    // Флаги отправленных email-напоминаний, чтобы крон-сервис не дублировал письма.
-    Notified24h bool `gorm:"column:notified_24h;default:false"`
-    Notified3h  bool `gorm:"column:notified_3h;default:false"`
-}
-
-// Tariff
-type Tariff struct {
-    gorm.Model
-    Name            string  `gorm:"size:255;not null"`
-    Price           float64 `gorm:"not null"`
-    DurationMinutes int     `gorm:"not null"`
-    LocationID      uint
-    Location        Location `gorm:"foreignKey:LocationID"`
-}
-
-// Location
-type Location struct {
-    gorm.Model
-    Name    string `gorm:"size:255;not null;unique"`
-    Address string `gorm:"size:255;not null"`
-}
-
-// Service (удобство/доп. услуга)
-type Service struct {
-    gorm.Model
-    Name        string `gorm:"size:255;not null;unique"`
-    Description string `gorm:"size:255;not null"`
-}
-
-// AuditLog (журнал аудита)
-type AuditLog struct {
-    gorm.Model
-    UserID     uint
-    User       User   `gorm:"foreignKey:UserID"`
-    Action     string `gorm:"size:255;not null"`
-    EntityType string `gorm:"size:255;not null"`
-    EntityID   uint
-    Timestamp  time.Time `gorm:"not null"`
-}
-```
-
-### 3.5. Фрагмент кода: обучение ML-модели (LightGBM)
-
-```python
-# ml/train_model.py
-import lightgbm as lgb
-import pandas as pd
-import numpy as np
-
-# Генерация 1000 синтетических дней
-days = np.random.randint(0, 7, 1000)
-is_weekend = (days >= 5).astype(int)
-
-# Логика загруженности:
-# Вт-Чт ~85%, Пн ~75%, Пт ~60%, выходные ~20% + нормальный шум
-base = np.where(np.isin(days, [1, 2, 3]), 85,
-       np.where(days == 0, 75,
-       np.where(days == 4, 60, 20)))
-workload = np.clip(base + np.random.normal(0, 8, 1000), 0, 100)
-
-df = pd.DataFrame({'day_of_week': days,
-                   'is_weekend': is_weekend,
-                   'workload':   workload})
-
-X, y = df[['day_of_week', 'is_weekend']], df['workload']
-train_data = lgb.Dataset(X, label=y,
-    categorical_feature=['day_of_week', 'is_weekend'])
-
-params = {
-    'objective':     'regression',  # регрессия — предсказываем %
-    'metric':        'rmse',
-    'learning_rate': 0.05,
-    'num_leaves':    15,
-    'verbose':       -1
-}
-
-bst = lgb.train(params, train_data, num_boost_round=150)
-bst.save_model('workload_model.txt')   # веса грузятся в Go-сервер
-```
-
-### 3.6. Текущее содержимое корневого README.md
-
-> В репозитории на момент написания корневой `README.md` содержит маркеры незавершённого git-merge (`<<<<<<< HEAD` / `>>>>>>>`). Полезное содержимое — раздел из ветки `b4d8ccd...`:
-
-- название: «🏢 CSBS — Coworking Space Booking System»;
-- описание: система бронирования рабочих мест в коворкинге;
-- ключевые возможности: регистрация/авторизация (JWT), роли (User / CoworkAdmin / SystemAdmin), каталог рабочих мест, бронирование с контролем пересечений, интеграция с Gemini для прогноза цены/загрузки, журнал аудита;
-- стек: Go, go-chi/chi v5, PostgreSQL, GORM, JWT, bcrypt, CORS;
-- слоистая архитектура: Handler → Service → Repository → PostgreSQL;
-- API-эндпоинты: `POST /api/users/register`, `POST /api/users/login`, `GET /api/workspaces`, `POST/GET /api/reservations`, `GET /api/predictions/workload?day=...`, `GET /api/auditlogs` и т.д.
-- переменные окружения: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `SERVER_PORT`, `GEMINI_API_KEY`.
-
-### 3.7. Контейнеризация и развёртывание (Docker)
-
-Проект полностью контейнеризован. Локальное и тестовое окружение поднимается одной командой `docker compose up`, без необходимости вручную ставить Go, Node.js, nginx или PostgreSQL на хост.
-
-#### 3.7.1. Архитектура развёртывания
-
-`docker-compose.yml` поднимает пять сервисов в одной сети:
-
-| Сервис | Образ / база | Назначение | Внешний порт |
-|---|---|---|---|
-| `postgres` | `postgres:16-alpine` | СУБД, данные хранятся в именованном volume `postgres-data` | не публикуется |
-| `kafka` | `bitnami/kafka:3.7` | Брокер событий в **KRaft-режиме** (без zookeeper), данные в volume `kafka-data` | `9092` |
-| `backend` | собирается из `backend/Dockerfile` | Go-приложение CSBS API + продюсер и консьюмеры Kafka в отдельных горутинах | `8080` |
-| `frontend` | собирается из `CSBS-FRONTEND/Dockerfile` | React-сборка, отдаваемая через nginx | `3000` (внутри — `80`) |
-| `postgres-backup` | `prodrigestivill/postgres-backup-local:16` | Автоматический `pg_dump` БД по расписанию с ротацией дампов | не публикуется |
-
-Зависимости и порядок старта:
-- `backend` стартует только после того, как `postgres` **и** `kafka` прошли `healthcheck` (`pg_isready` и `kafka-broker-api-versions.sh` соответственно);
-- `postgres-backup` стартует после `postgres`;
-- `frontend` зависит от `backend` (`depends_on`);
-- внутри docker-сети backend подключается к БД по DNS-имени `postgres` и к брокеру по `kafka:9092`, поэтому в compose переопределяются `DB_HOST=postgres` и `KAFKA_BROKERS=kafka:9092` (в локальном `.env` они остаются `localhost` / `localhost:9092` — для запуска `go run` без Docker).
-
-#### 3.7.2. Multi-stage сборка
-
-Оба прикладных образа используют **multi-stage build** для минимизации размера и исключения инструментов сборки из рантайм-образа.
-
-**Backend (`backend/Dockerfile`):**
-1. Стадия `builder` — `golang:1.24-alpine`, кэширование зависимостей через отдельный `go mod download`, затем `go build -o /out/server ./cmd/server` со статической линковкой (`CGO_ENABLED=0`).
-2. Рантайм — `alpine:3.20` с двумя пакетами: `tzdata` (требуется, т.к. в коде задан `TimeZone=Europe/Moscow`) и `ca-certificates` (для исходящих HTTPS-запросов к Gemini API). В образ копируется только бинарь `server` и файл весов `workload_model.txt`.
-
-**Frontend (`CSBS-FRONTEND/Dockerfile`):**
-1. Стадия `builder` — `node:22-alpine`, установка зависимостей через `npm ci`, сборка `npm run build` (Vite) → каталог `dist/`.
-2. Рантайм — `nginx:1.27-alpine` со скопированной статикой и кастомным `nginx.conf` (SPA-fallback на `index.html`, gzip, годовой кэш для `/assets/`).
-
-#### 3.7.3. Управление переменными окружения
-
-Единый источник правды — файл `backend/.env` (исключён из git через `.gitignore`). В репозитории присутствует **`backend/.env.example`** — шаблон без секретов; новый разработчик копирует его в `backend/.env` и подставляет реальные значения. Файл содержит:
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` — параметры подключения к PostgreSQL;
-- `SERVER_PORT` — порт HTTP-сервера;
-- `GEMINI_API_KEY`, `GEMINI_PROXY_URL`, `GEMINI_DNS` — ключ Google Gemini, прокси для обхода геоблока, кастомные DNS-серверы;
-- `GIGACHAT_AUTH_KEY`, `GIGACHAT_SCOPE`, `GIGACHAT_MODEL`, `GIGACHAT_INSECURE_SKIP_VERIFY` — авторизация и параметры GigaChat (Сбер);
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `APP_URL` — параметры SMTP-отправки писем и URL фронта для ссылок;
-- `KAFKA_BROKERS` — список адресов брокеров через запятую. Пустое значение → продюсер и консьюмеры не стартуют, остальное приложение работает как обычно (graceful degradation).
-
-Compose использует этот файл двумя путями:
-- через флаг `--env-file backend/.env` — для интерполяции переменных в самом `docker-compose.yml` (инициализация PostgreSQL: `POSTGRES_USER=${DB_USER}` и т.д.);
-- через директиву `env_file: ./backend/.env` у сервиса `backend` — переменные пробрасываются внутрь контейнера и читаются Go-приложением через `os.Getenv`.
-
-Команда запуска:
-```
-docker compose --env-file backend/.env up --build
-```
-
-#### 3.7.4. Резервное копирование БД (автоматическое)
-
-Резервное копирование реализовано отдельным сервисом `postgres-backup` на базе образа `prodrigestivill/postgres-backup-local:16` (обёртка над утилитой `pg_dump`), что устраняет необходимость ручных скриптов или внешнего cron на хосте.
-
-**Параметры бэкапа (`docker-compose.yml`):**
-
-| Параметр | Значение | Назначение |
-|---|---|---|
-| `SCHEDULE` | `@daily` | Cron-расписание — раз в сутки в 00:00 UTC |
-| `BACKUP_KEEP_DAYS` | `7` | Хранить 7 ежедневных дампов |
-| `BACKUP_KEEP_WEEKS` | `4` | Хранить 4 еженедельных дампа |
-| `BACKUP_KEEP_MONTHS` | `6` | Хранить 6 ежемесячных дампов |
-| `POSTGRES_EXTRA_OPTS` | `-Z6 --schema=public --blobs` | Сжатие gzip уровень 6, дамп схемы `public` с large objects |
-
-**Размещение дампов.** Дампы пишутся через bind-mount в каталог `./backups/` на хосте, со структурой `daily/`, `weekly/`, `monthly/`. Каталог исключён из git через `.gitignore`. Это позволяет:
-- забирать дампы любым внешним инструментом (rsync, S3-аплоадер) с хоста, не залезая в Docker;
-- легко проверить и восстановить дамп командой `gunzip -c backups/daily/<file>.sql.gz | psql -U postgres -d csbs`.
-
-**Восстановление из дампа** (пример):
-```
-docker compose exec -T postgres psql -U postgres -d csbs < <(gunzip -c backups/daily/csbs-XXXX.sql.gz)
-```
-
-**Обоснование решения.** В отличие от ручного `pg_dump` по требованию (как было описано в §2.4 ранее), отдельный сервис обеспечивает: (1) автоматизацию без участия администратора, (2) детерминированную ротацию старых дампов, (3) изоляцию процесса бэкапа от backend-приложения, (4) возможность поднимать бэкап-сервис на отдельной машине, нацеленной на ту же БД. Сама БД при этом продолжает использовать стандартный механизм PostgreSQL — никаких внешних зависимостей в самом приложении.
-
-#### 3.7.5. Обоснование выбранного подхода
-
-1. **Воспроизводимость окружения** — устраняется класс ошибок «у меня работает». Любой разработчик/тестировщик/преподаватель получает идентичную среду с одной и той же версией Go (1.24), Node.js (22), nginx (1.27) и PostgreSQL (16).
-2. **Отделение секретов от образов** — `.env` не копируется в образ (исключён через `.dockerignore`); все чувствительные значения подставляются на этапе запуска контейнера.
-3. **Минимальный размер рантайм-образов** — backend получается порядка ~25–35 МБ (alpine + статический Go-бинарь), frontend — ~50 МБ (nginx-alpine + статика).
-4. **Изоляция БД** — PostgreSQL работает в отдельном контейнере с персистентным volume; порт наружу не публикуется, доступ только из docker-сети.
-5. **Готовность к CI/CD** — те же образы могут собираться в pipeline и публиковаться в реестр для прод-развёртывания (Kubernetes, Docker Swarm, обычная VM с docker compose).
-
-### 3.8. Event-driven архитектура (Apache Kafka)
-
-#### 3.8.1. Зачем
-
-До интеграции `ReservationService.CreateReservation` синхронно делал три вещи: писал бронь в БД, писал запись в `audit_logs`, ничего не сообщал пользователю на e-mail. Добавление новых сторон-потребителей (notifications, аналитика, внешние интеграции — Telegram-бот, CRM) требовало бы менять сервис на каждый случай.
-
-С Kafka сервис делает **один** дополнительный шаг — публикует событие в топик. Сколько угодно подписчиков читают этот топик независимо и не блокируют API-ответ.
-
-#### 3.8.2. Топик и схема событий
-
-| Параметр | Значение |
+| Главная | Бронирование |
 |---|---|
-| Топик | `booking.events` |
-| Партиций | по умолчанию (1 на dev), масштабируется при росте трафика |
-| Ключ сообщения | `ReservationID` (через `Hash`-балансировщик → события одной брони идут в один раздел и читаются по порядку) |
-| Сжатие | Snappy |
-| Заголовки | `event-type` (`booking.created` / `booking.updated` / `booking.cancelled`) |
-
-Payload (`pkg/kafka/events.go::BookingEvent`) **денормализован** — содержит email, имя пользователя, название места и локации. Это сознательное решение: консьюмеры не ходят за этими данными в БД на каждое сообщение, а получают всё одним JSON-сообщением.
-
-```go
-type BookingEvent struct {
-    Type          string    `json:"type"`
-    ReservationID uint      `json:"reservation_id"`
-    UserID        uint      `json:"user_id"`
-    UserEmail     string    `json:"user_email,omitempty"`
-    UserName      string    `json:"user_name,omitempty"`
-    WorkspaceID   uint      `json:"workspace_id"`
-    WorkspaceName string    `json:"workspace_name,omitempty"`
-    LocationName  string    `json:"location_name,omitempty"`
-    StartTime     time.Time `json:"start_time"`
-    EndTime       time.Time `json:"end_time"`
-    Status        string    `json:"status,omitempty"`
-    OccurredAt    time.Time `json:"occurred_at"`
-}
-```
-
-#### 3.8.3. Продюсер
-
-Реализован в `pkg/kafka/producer.go` поверх `segmentio/kafka-go`. Метод `PublishAsync(evt)` — fire-and-forget:
-
-```go
-go func() {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    if err := p.PublishBookingEvent(ctx, evt); err != nil {
-        logger.Error.Printf("Kafka: publish %s failed: %v", evt.Type, err)
-    }
-}()
-```
-
-Сделано сознательно: если брокер недоступен или есть лаг — это не должно подвешивать HTTP-запрос на создание брони. Ошибки пишутся в лог; для критичных событий в продакшене на этом месте уместен outbox-паттерн (запись в `outbox` таблицу в той же транзакции + отдельный воркер шлёт в Kafka), но это вне scope текущей реализации.
-
-При пустом `KAFKA_BROKERS` продюсер возвращает `nil` и все вызовы `PublishAsync` становятся no-op — приложение продолжает работать без Kafka.
-
-#### 3.8.4. Консьюмеры
-
-В одном бинарике запускаются **два независимых консьюмера** с разными `GroupID`, что гарантирует обоим получение каждого сообщения:
-
-| Group ID | Файл | Что делает |
-|---|---|---|
-| `csbs-notifications` | `internal/service/booking_event_consumers.go::notificationHandler` | На `booking.created` шлёт письмо «Бронь подтверждена» через `email.SendBookingConfirmation`. На `booking.cancelled` — логирует (можно расширить отдельным письмом). |
-| `csbs-audit-mirror` | `internal/service/booking_event_consumers.go::auditMirrorHandler` | Пишет дублирующую запись в `audit_logs` с `Action="kafka:<event-type>"`, чтобы трассировать прохождение событий сквозь шину независимо от прямого вызова сервиса. |
-
-Консьюмеры стартуют из `main.go` через `service.StartBookingEventConsumers(ctx, brokers, mailer, auditRepo)`. Каждый — в своей горутине; auto-commit раз в секунду. При `ctx.Done()` закрываются штатно.
-
-#### 3.8.5. Точки публикации
-
-`ReservationService` публикует событие **после успешной операции с БД и аудит-логом**:
-
-- `CreateReservation` → `booking.created`;
-- `UpdateReservation` → `booking.updated` (или `booking.cancelled`, если новый статус = «отменено»);
-- `DeleteReservation` → `booking.cancelled` (payload собирается из снапшота **до** удаления, чтобы консьюмер получил полный контекст).
-
-Старые прямые вызовы `auditRepo.Create` оставлены — Kafka работает **параллельно**, а не вместо них. Это даёт постепенную миграцию без риска потерять записи, если Kafka временно недоступна.
-
-#### 3.8.6. Локальный запуск без Docker
-
-Достаточно поднять один Kafka:
-
-```bash
-# в одном терминале — Kafka из docker-compose
-docker compose --env-file backend/.env up kafka
-
-# в другом — бэкенд (KAFKA_BROKERS=localhost:9092 уже в .env)
-cd backend && go run cmd/server/main.go
-```
-
-В логах должно появиться:
-```
-Kafka: продюсер инициализирован, брокеры=[localhost:9092]
-Kafka: консьюмер "csbs-notifications" запущен (topic=booking.events)
-Kafka: консьюмер "csbs-audit-mirror" запущен (topic=booking.events)
-```
-
-После создания брони через UI/API:
-```
-Kafka: published booking.created reservation=42
-SMTP: sending booking confirmation to user@mail.ru
-```
-
-
-## 5. Тестирование программы (раздел инженера по качеству)
-
-Раздел построен в соответствии с шестью обязанностями тестировщика, закреплёнными в требованиях курсовой работы:
-
-1. Планирование тестирования (раздел 5.1).
-2. Тестирование во время разработки (5.2).
-3. Финальное тестирование продукта — не менее 10 проверок UI, 10 серверных проверок, 5 сквозных бизнес-сценариев и валидация AI-модуля (5.3).
-4. Регистрация дефектов и контроль исправлений (5.4).
-5. Отчёт о тестировании с фактическими результатами и рекомендациями (5.5).
-6. Сопровождение развёртывания / приёмочные испытания (5.6).
+| ![Главная](docs/screenshots/home.png) | ![Бронирование](docs/screenshots/booking.png) |
+| **Дашборд аналитики** | **ИИ-ассистент** |
+| ![Дашборд аналитики](docs/screenshots/dashboard.png) | ![ИИ-ассистент](docs/screenshots/ai-chat.png) |
 
 ---
 
-### 5.1. План тестирования
-
-#### 5.1.1. Цель
-
-Подтвердить, что система **CSBS** соответствует функциональным и нефункциональным требованиям технического задания: безопасное многоролевое управление коворкингом, корректное бронирование без коллизий, адекватная работа гибридного AI-модуля (LightGBM + Gemini).
-
-#### 5.1.2. Объекты тестирования
-
-1. Серверная часть на Go (REST API, JWT-аутентификация, GORM-доступ к PostgreSQL).
-2. Клиентское приложение на React + Vite.
-3. ML-модуль `prediction_service` (LightGBM, инференс через `dmitryikh/leaves`).
-4. Интеграция с Google Gemini API (рекомендация цены, ИИ-ассистент).
-5. База данных PostgreSQL: миграции, целостность ссылок, soft-delete, аудит.
-
-#### 5.1.3. Виды тестирования
-
-| Вид | Кто выполняет | Инструменты |
-|---|---|---|
-| Модульное (unit) | Разработчики | `go test`, `testify`, Vitest |
-| Функциональное (API) | QA | Postman / Newman, ручное |
-| UI-тестирование | QA | Playwright + ручная проверка в Chrome/Firefox |
-| Интеграционное | QA + Dev | Docker-compose с PostgreSQL, мок Gemini |
-| Сквозное (end-to-end) | QA | Playwright по всем ролям |
-| Тестирование AI-модуля | QA | Сравнение с эталонными значениями + ручная экспертная оценка |
-| Безопасность | QA | OWASP ZAP, ручное тестирование (Burp), `gosec` |
-| Нагрузочное | QA | k6 |
-| Приёмочное | Заказчик + QA | Чек-лист в боевом окружении |
-
-#### 5.1.4. Критерии входа в тестирование
-
-- Код собирается без ошибок (`go build`, `npm run build`).
-- Миграции применяются на чистой PostgreSQL без ошибок.
-- Тестовый стенд развёрнут и доступен.
-- Тестовая БД заполнена эталонными данными (см. 5.2.3).
-
-#### 5.1.5. Критерии выхода (готовность к релизу)
-
-- 100% тест-кейсов с приоритетом P1 пройдены успешно.
-- ≥ 95% тест-кейсов P2 пройдены.
-- Покрытие unit-тестами критических сервисов (`reservation_service`, `prediction_service`, `auth_middleware`) ≥ 80%.
-- Все известные дефекты уровня Blocker и Critical закрыты.
-- Подписан акт приёмочных испытаний.
-
-#### 5.1.6. График
-
-| Этап | Длительность | Результат |
-|---|---|---|
-| Анализ требований и составление тест-плана | 3 дня | Настоящий документ |
-| Тестирование во время разработки | параллельно с разработкой | Postman-коллекции, баг-репорты |
-| Финальное тестирование | 5 дней | Отчёт 5.5 |
-| Регрессия после исправлений | 2 дня | Закрытие дефектов |
-| Приёмочные испытания | 1 день | Акт ввода в эксплуатацию |
-
----
-
-### 5.2. Тестирование во время разработки
-
-#### 5.2.1. Промежуточные проверки
-
-QA подключается на ранних этапах:
-
-1. Ревью прототипа UI на этапе вёрстки страниц «Каталог», «Личный кабинет», «Чат с ассистентом» — проверка удобства, понятности, доступности.
-2. Ручная проверка отдельных API-методов через Postman сразу после их реализации (до интеграции с фронтендом).
-3. Совместный просмотр SQL-схемы и миграций для выявления отсутствующих индексов и FK.
-
-#### 5.2.2. Postman-коллекция (фрагмент)
-
-```
-CSBS-API/
-  ├── Auth/
-  │   ├── Register (POST /api/users/register)
-  │   ├── Login   (POST /api/users/login)
-  │   └── Me      (GET  /api/users/me)
-  ├── Workspaces/
-  │   ├── List, GetByID, Create, Update, Delete
-  ├── Reservations/
-  │   ├── Create, List, Availability, UpdateStatus
-  ├── Predictions/
-  │   ├── Workload?day=monday
-  │   └── Weekly
-  └── Chat/
-      ├── Send, History, Clear
-```
-
-Коллекция запускается автоматически в CI через `newman run csbs.postman_collection.json -e test.env`.
-
-#### 5.2.3. Тестовые данные (seed)
-
-Для воспроизводимости QA вместе с разработчиками подготовил скрипт сидинга `seed.sql`:
-
-| Сущность | Кол-во записей | Примечание |
-|---|---|---|
-| Roles | 3 | `user`, `cowork_admin`, `system_admin` |
-| Users | 6 | по 2 на роль; пароль `Test12345!` |
-| Locations | 2 | «Центр», «Север» |
-| WorkspaceCategories | 3 | «Стол», «Переговорная», «Опен-спейс» |
-| Services | 5 | Wi-Fi, монитор, кофе, проектор, парковка |
-| Workspaces | 12 | по 6 на локацию |
-| Tariffs | 4 | 1 ч / 4 ч / 1 день / 1 неделя |
-| Reservations | 20 | смесь активных/завершённых/отменённых; включены брони на завтра для проверки коллизий |
-
----
-
-### 5.3. Финальное тестирование
-
-Минимальные требования методики (≥10 UI, ≥10 серверных, ≥5 сквозных) выполнены и перевыполнены: проведено **15 UI-проверок, 18 серверных проверок и 7 сквозных сценариев**, плюс отдельная валидация AI-модуля.
-
-#### 5.3.1. Тесты пользовательского интерфейса (15 шт., минимум 10)
-
-| ID | Проверка | Шаги | Ожидаемый результат |
-|---|---|---|---|
-| UI-01 | Загрузка главной страницы | Открыть `/` | Страница рендерится < 2 с, ошибок в консоли нет |
-| UI-02 | Регистрация через форму | Заполнить все поля, нажать «Зарегистрироваться» | Редирект на login + toast «Успешно» |
-| UI-03 | Валидация формы регистрации | Ввести `email = "abc"` | Поле подсвечено красным, кнопка submit заблокирована |
-| UI-04 | Авторизация | Ввести корректные login/пароль | Редирект на личный кабинет, JWT сохранён |
-| UI-05 | Авторизация: неверный пароль | Ввести неверный пароль | Сообщение «Неверный логин или пароль» |
-| UI-06 | Каталог рабочих мест | Открыть `/workspaces` | Видны карточки всех активных мест с фото/описанием |
-| UI-07 | Фильтрация в каталоге | Выбрать локацию «Центр» | Список обновляется, видны только места локации «Центр» |
-| UI-08 | Создание брони через форму | Выбрать место, дату, тариф | Появляется уведомление «Бронь создана», запись видна в ЛК |
-| UI-09 | Двойная бронь через UI | Попытаться забронировать занятое время | Toast «Время занято», бронь не создана |
-| UI-10 | Просмотр своих броней | Открыть «Мои бронирования» | Виден полный список со статусами, фильтр работает |
-| UI-11 | Отмена брони | Нажать «Отменить» на активной брони | Статус меняется на «отменена» |
-| UI-12 | Админ: создание workspace | Под `cowork_admin` пройти форму | Запись появляется в каталоге, в журнале аудита |
-| UI-13 | Системный админ: смена роли | Изменить роль клиента на `cowork_admin` | Изменение применяется, у пользователя появляется доступ к админке |
-| UI-14 | ИИ-ассистент | Открыть чат, отправить «Какие у вас тарифы?» | Ответ появляется ≤ 5 с, история сохраняется при перезагрузке страницы |
-| UI-15 | Logout | Нажать «Выйти» | JWT удалён, редирект на главную, защищённые страницы недоступны |
-
-#### 5.3.2. Тесты серверной части (18 шт., минимум 10)
-
-| ID | Проверка | Метод | Ожидаемый результат |
-|---|---|---|---|
-| API-01 | Регистрация валидного пользователя | `POST /api/users/register` | HTTP 201, пароль в БД — bcrypt-хэш |
-| API-02 | Регистрация с дублирующим email | `POST /api/users/register` | HTTP 400/409 |
-| API-03 | Login с верными данными | `POST /api/users/login` | HTTP 200, JWT в ответе |
-| API-04 | Login заблокированного пользователя | то же, `Status=заблокирован` | HTTP 403 |
-| API-05 | Доступ к `/me` без JWT | `GET /api/users/me` | HTTP 401 |
-| API-06 | Доступ к `/me` с поддельной подписью JWT | заголовок с изменённой подписью | HTTP 401 |
-| API-07 | Получение списка рабочих мест | `GET /api/workspaces` | HTTP 200, JSON-массив |
-| API-08 | Создание workspace под `user` | `POST /api/workspaces` | HTTP 403 |
-| API-09 | Создание workspace под `cowork_admin` | `POST /api/workspaces` | HTTP 201, audit-log записан |
-| API-10 | Создание брони с верным интервалом | `POST /api/reservations` | HTTP 201 |
-| API-11 | Создание брони с пересечением | то же на занятый интервал | HTTP 409 |
-| API-12 | Создание брони с `EndTime < StartTime` | то же | HTTP 400 |
-| API-13 | IDOR: чужая бронь | `GET /api/reservations/{чужой_id}` | HTTP 403/404 |
-| API-14 | Изменение роли под `cowork_admin` | `PUT /api/admin/users/{id}/role` | HTTP 403 |
-| API-15 | Прогноз загруженности на понедельник | `GET /api/predictions/workload?day=monday` | HTTP 200, percent ∈ [60, 90] |
-| API-16 | Прогноз с невалидным днём | `?day=funday` | HTTP 400 |
-| API-17 | Доступ к аудит-логу под `user` | `GET /api/auditlogs` | HTTP 403 |
-| API-18 | Получение аудит-лога администратором | `GET /api/auditlogs` под `cowork_admin` | HTTP 200, массив записей |
-
-#### 5.3.3. Сквозные сценарии бизнес-процессов (7 шт., минимум 5)
-
-| ID | Сценарий | Шаги | Ожидаемый результат |
-|---|---|---|---|
-| E2E-01 | **Путь нового клиента «от регистрации до брони»** | 1. Регистрация → 2. Login → 3. Просмотр каталога → 4. Выбор тарифа → 5. Создание брони → 6. Просмотр в ЛК | На каждом шаге HTTP 2xx; в БД есть `User`, `Reservation`; пользователь видит свою бронь |
-| E2E-02 | **Запуск нового филиала менеджером** | 1. Login `cowork_admin` → 2. Создание Location → 3. Создание Categories/Services → 4. Создание Workspaces → 5. Привязка Tariffs → 6. Проверка доступности клиенту | Все сущности созданы, клиент видит новые места в публичном каталоге |
-| E2E-03 | **Жизненный цикл бронирования** | 1. Клиент создаёт бронь → 2. Менеджер меняет статус на `завершена` → 3. Клиент видит обновление | Статусы корректно обновляются; запись в audit-log на каждом этапе |
-| E2E-04 | **Управление пользователем системным администратором** | 1. Клиент регистрируется → 2. Системный админ повышает до `cowork_admin` → 3. Бывший клиент создаёт workspace → 4. Системный админ блокирует → 5. Попытка login | Login заблокированного — HTTP 403, все шаги в audit-log |
-| E2E-05 | **AI-рекомендация цены для рабочего дня** | 1. Login → 2. Запрос `/api/predictions/workload?day=tuesday` → 3. Запрос ценовой рекомендации → 4. Получение JSON | ML возвращает 70–95% → Gemini формирует повышенную цену → клиент видит JSON со всеми 4 полями |
-| E2E-06 | **AI-рекомендация цены для выходного** | то же для `sunday` | ML возвращает 5–35% → Gemini формирует скидку |
-| E2E-07 | **Защита от двойной брони при гонке** | Два клиента одновременно бронируют один и тот же интервал | Ровно один HTTP 201, второй HTTP 409, в БД одна запись |
-
-#### 5.3.4. Валидация AI-модуля
-
-Особенность QA-проверки AI-модуля: для модели регрессии известно ожидаемое распределение значений (см. логику обучения в `train_model.py`). Поэтому валидация построена на **эталонных входах с известным ожидаемым диапазоном**.
-
-**ML-модель (LightGBM):**
-
-| ID | Вход | Эталонное ожидание (по обучающей выборке) | Допустимое отклонение |
-|---|---|---|---|
-| ML-01 | `day_of_week=0` (Пн) | ~75% | ±10% |
-| ML-02 | `day_of_week=1` (Вт) | ~85% | ±10% |
-| ML-03 | `day_of_week=2` (Ср) | ~85% | ±10% |
-| ML-04 | `day_of_week=3` (Чт) | ~85% | ±10% |
-| ML-05 | `day_of_week=4` (Пт) | ~60% | ±10% |
-| ML-06 | `day_of_week=5` (Сб) | ~20% | ±10% |
-| ML-07 | `day_of_week=6` (Вс) | ~20% | ±10% |
-| ML-08 | Любой день, повторно 1000 раз | Дисперсия предсказания | < 1% (детерминизм инференса) |
-| ML-09 | RMSE на отложенной выборке | ≤ 12 (порог приемлемого качества) | — |
-
-**Gemini-логика рекомендации цены** (детерминированная часть, проверяется без обращения к LLM):
-
-| ID | Вход | Ожидаемое поведение |
-|---|---|---|
-| AI-01 | workload = 90% | `recommended_price_rub` > базовой цены тарифа |
-| AI-02 | workload = 60% | `recommended_price_rub` ≈ базовой цене |
-| AI-03 | workload = 30% | `recommended_price_rub` < базовой (скидка) |
-| AI-04 | Структура ответа Gemini | JSON содержит непустые `day`, `expected_workload_percent`, `recommended_price_rub`, `message` |
-| AI-05 | Недоступность Gemini | API возвращает HTTP 502 с понятным сообщением, не падает 500 |
-| AI-06 | Промпт-инъекция в чат | Ассистент не раскрывает системный промпт и `GEMINI_API_KEY` |
-| AI-07 | Изоляция историй чата | User A не видит сообщения user B даже при подделке параметров |
-
----
-
-### 5.4. Регистрация дефектов и контроль исправлений
-
-#### 5.4.1. Шаблон bug-report
-
-Все дефекты регистрируются в баг-трекере (GitHub Issues / Jira) по единому шаблону:
-
-```
-ID:           BUG-001
-Заголовок:    Краткое описание проблемы
-Окружение:    backend@commit, БД, браузер
-Серьёзность:  Blocker / Critical / Major / Minor / Trivial
-Приоритет:    P1 / P2 / P3
-Шаги воспроизведения:
-   1. ...
-   2. ...
-Фактический результат:    что произошло
-Ожидаемый результат:      что должно было произойти
-Приложения:               скриншот / лог / curl-команда
-Статус:                   New / In progress / Fixed / Verified / Closed / Reopened
-```
-
-#### 5.4.2. Реестр дефектов, обнаруженных при тестировании
-
-| ID | Заголовок | Серьёзность | Связанный тест | Статус |
-|---|---|---|---|---|
-| BUG-001 | В корневом `README.md` остались маркеры git-merge `<<<<<<< HEAD` | Minor | — (визуальная проверка репозитория) | Open |
-| BUG-002 | Регистрация принимает пароль длиной 1 символ | Major | API-01, UI-03 | Fixed → Verified |
-| BUG-003 | При двойной брони в условиях гонки иногда создаются 2 записи | Critical | E2E-07, API-11 | Fixed → Verified |
-| BUG-004 | Пользователь может прочитать чужую бронь по прямому ID | Critical | API-13 | Fixed → Verified |
-| BUG-005 | JWT принимается с алгоритмом `none` | Blocker | (security-проверка) | Fixed → Verified |
-| BUG-006 | ИИ-ассистент сохраняет историю всех пользователей в общий список | Critical | UI-14, AI-07 | Fixed → Verified |
-| BUG-007 | На мобильном (360px) форма регистрации обрезается | Minor | UI-02 | Fixed → Verified |
-| BUG-008 | При недоступности Gemini сервер возвращает 500 вместо 502 | Major | AI-05 | Fixed → Verified |
-| BUG-009 | Прогноз для невалидного `day` возвращает 200 с null | Major | API-16 | Fixed → Verified |
-| BUG-010 | Soft-delete workspace продолжает отображаться в публичном каталоге | Major | (визуальная проверка после TC-03-11) | Fixed → Verified |
-
-#### 5.4.3. Регрессионное тестирование
-
-После исправления каждого дефекта проводился повторный прогон:
-
-1. **Точечная проверка** — повторение шагов из bug-report.
-2. **Регрессия по связанному модулю** — все тесты модуля, к которому относится дефект (например, после BUG-003 — все TC бронирования).
-3. **Smoke-набор** — UI-01, UI-04, UI-08, API-01, API-03, API-10, E2E-01 — после каждой сборки.
-
-Результат: все 9 исправленных дефектов закрыты, регресс по соседним модулям не выявлен. **BUG-001 (косметический)** остаётся открытым и вынесен в рекомендации.
-
----
-
-### 5.5. Отчёт о тестировании
-
-#### 5.5.1. Сводная таблица проведённых тестов
-
-| Категория | Запланировано | Проведено | Пройдено | Провалено | Заблокировано |
-|---|---|---|---|---|---|
-| UI-тесты | 15 | 15 | 14 | 1 (UI-02) → исправлен | 0 |
-| Серверные тесты (API) | 18 | 18 | 17 | 1 (API-13) → исправлен | 0 |
-| Сквозные сценарии (E2E) | 7 | 7 | 6 | 1 (E2E-07) → исправлен | 0 |
-| Валидация ML-модели | 9 | 9 | 9 | 0 | 0 |
-| Валидация AI/Gemini | 7 | 7 | 6 | 1 (AI-05) → исправлен | 0 |
-| Безопасность (выборочно) | 5 | 5 | 4 | 1 (JWT none) → исправлен | 0 |
-| **Итого** | **61** | **61** | **56** | **5 → все исправлены** | **0** |
-
-#### 5.5.2. Детальный отчёт «ожидаемое vs фактическое» (выдержка)
-
-| ID | Ожидаемый результат | Фактический результат (после исправлений) | Статус |
-|---|---|---|---|
-| UI-01 | Главная грузится < 2 с | 0.9 с (Lighthouse) | ✅ Pass |
-| UI-08 | Бронь создаётся, виден toast | Бронь создана, toast отображён | ✅ Pass |
-| UI-09 | Toast «Время занято» | Toast корректно отображается | ✅ Pass |
-| API-01 | HTTP 201, bcrypt-хэш в БД | HTTP 201, hash начинается с `$2a$` | ✅ Pass |
-| API-11 | HTTP 409 при пересечении | HTTP 409, JSON `{error:"interval_conflict"}` | ✅ Pass |
-| API-13 | HTTP 403/404 (IDOR) | До исправления: HTTP 200; после: HTTP 403 | ✅ Pass (после BUG-004) |
-| E2E-01 | Полный путь клиента работает | Все 6 шагов проходят | ✅ Pass |
-| E2E-07 | Ровно 1 успешная бронь из 2 параллельных | До: 2 записи; после: 1 запись + 1 ошибка 409 | ✅ Pass (после BUG-003) |
-| ML-01 | Прогноз понедельника ~75 ± 10% | 76.8% | ✅ Pass |
-| ML-05 | Прогноз пятницы ~60 ± 10% | 58.4% | ✅ Pass |
-| ML-06 | Прогноз субботы ~20 ± 10% | 22.1% | ✅ Pass |
-| ML-09 | RMSE ≤ 12 | RMSE = 8.7 | ✅ Pass |
-| AI-01 | Цена > базовой при 90% | На 25% выше базовой | ✅ Pass |
-| AI-05 | HTTP 502 при недоступности Gemini | До: HTTP 500; после: HTTP 502 + сообщение | ✅ Pass (после BUG-008) |
-| AI-06 | Системный промпт не раскрывается | Не раскрывается | ✅ Pass |
-
-#### 5.5.3. Метрики качества
-
-| Метрика | Значение | Норма |
-|---|---|---|
-| Pass rate (после исправлений) | 100% (61/61) | ≥ 95% |
-| Defect Density (на 1000 строк кода) | ~1.2 | ≤ 3 |
-| Покрытие unit-тестами critical-сервисов | 84% | ≥ 80% |
-| Среднее время ответа `GET /api/workspaces` (p95) | 87 мс | < 200 мс |
-| Время инференса ML-модели | 4 мс | < 50 мс |
-| Открытых дефектов уровня Blocker/Critical | 0 | 0 |
-
-#### 5.5.4. Рекомендации по улучшению качества
-
-1. **Закрыть BUG-001** — очистить корневой `README.md` от маркеров merge-конфликта; в CI добавить шаг `grep -rn "<<<<<<< HEAD" .` с фейлом сборки.
-2. **Rate-limiting** — добавить ограничение частоты запросов на `/login` и `/register` для защиты от перебора (сейчас отсутствует, см. TC-01-17).
-3. **CSRF-защита** — оценить необходимость CSRF-токенов, если cookie используются как способ хранения JWT.
-4. **Расширить unit-тесты** на `prediction_service` до 95% — это сердце AI-модуля, регрессии здесь критичны.
-5. **Контрактные тесты** между frontend и backend (например, через Pact) — снизят риск рассинхрона API.
-6. **Мониторинг в проде:** Prometheus + Grafana с алертами на 5xx, latency p95, ошибки Gemini API.
-7. **A/B-валидация ML-модели на боевых данных** — переобучать раз в квартал на реальной истории броней, а не на синтетике.
-8. **Локализация ошибок** — сейчас часть сообщений на русском, часть на английском; стоит унифицировать.
-9. **Аудит-лог** дополнить полем `IP` и `UserAgent` для расследования инцидентов.
-10. **E2E в CI** — Playwright-тесты сейчас запускаются вручную; стоит включить их в pipeline на каждый PR.
-
----
-
-### 5.6. Сопровождение развёртывания (приёмочные испытания)
-
-#### 5.6.1. Чек-лист готовности к вводу в эксплуатацию
-
-| № | Проверка | Метод | Результат |
-|---|---|---|---|
-| 1 | Развёртывание из чистого образа | docker-compose up на новой VM | ✅ Сервер стартует, миграции применяются |
-| 2 | Переменные окружения настроены | `DB_*`, `GEMINI_API_KEY`, `JWT_SECRET` заданы и не дефолтные | ✅ |
-| 3 | HTTPS / TLS | Обращение по https, проверка сертификата | ✅ |
-| 4 | Резервное копирование | Запуск `pg_dump`, восстановление на тестовый стенд | ✅ Дамп успешно восстановлен |
-| 5 | Smoke-набор в проде | E2E-01, UI-04, UI-08, UI-14, API-01, API-10, API-15 | ✅ Все 7 тестов пройдены |
-| 6 | Мониторинг и логирование | Логи пишутся, метрики отдаются | ✅ |
-| 7 | Доступ системного администратора | Создан первичный аккаунт system_admin, пароль смены при первом входе | ✅ |
-| 8 | Производительность под реальной нагрузкой | k6: 50 RPS на каталог в течение 10 мин | ✅ p95 = 142 мс |
-| 9 | Откат (rollback) | Симуляция плохой сборки, откат на предыдущий тег | ✅ Откат за < 2 мин |
-| 10 | Документация для пользователей | Краткая инструкция и API-описание доступны | ✅ |
-
-#### 5.6.2. Заключение QA
-
-По результатам всех видов тестирования и приёмочных испытаний система **CSBS** соответствует функциональным и нефункциональным требованиям технического задания и **рекомендуется к вводу в эксплуатацию**. Открытых дефектов уровня Blocker и Critical нет; остающийся косметический дефект BUG-001 не препятствует эксплуатации и подлежит устранению в ближайшем патче.
-
-| Параметр | Значение |
-|---|---|
-| Дата подписания отчёта | 2026-04-25 |
-| Тестировщик | mrantoha059@gmail.com |
-| Pass rate | 100% |
-| Открытые дефекты Blocker/Critical | 0 |
-| Решение | **Допустить к вводу в эксплуатацию** |
-
----
-
-### 5.7. Реализованные автоматизированные тесты
-
-Помимо ручного и исследовательского тестирования, в рамках проекта был разработан набор автоматизированных тестов трёх уровней. Все тесты интегрируются в pipeline и воспроизводимы локально без дополнительной настройки.
-
-#### 5.7.1. Уровни автоматизации
-
-| Уровень | Инструмент | Файлы | Кол-во тестов | Без реального бэкенда |
-|---|---|---|---|---|
-| **Unit (API-хендлеры)** | Go `testing` + `net/http/httptest` | `backend/internal/api/handlers/handlers_test.go` | 5 | ✅ (mock-сервисы) |
-| **Автотесты по сборке** | Playwright (Chromium) | `CSBS-FRONTEND/e2e/build-smoke.spec.js` | 5 | ✅ (только frontend) |
-| **Сквозные (E2E)** | Playwright (Chromium) | `CSBS-FRONTEND/e2e/e2e-full.spec.js` | 3 | ❌ (нужен `docker compose up`) |
-
----
-
-#### 5.7.2. Unit-тесты API-хендлеров (Go)
-
-**Расположение:** `backend/internal/api/handlers/handlers_test.go`
-
-**Подход:** каждый хендлер принимает сервисный интерфейс (`TariffService`, `UserService`, `ReservationService`). В тестах реальная БД заменяется mock-реализацией интерфейса, HTTP-запросы создаются через `httptest.NewRequest`, ответы — через `httptest.NewRecorder`. Тестируется именно HTTP-поведение хендлера, а не бизнес-логика сервиса.
-
-**Команда запуска:**
-```bash
-cd backend
-go test ./internal/api/handlers/... -v
-```
-
-**Тесты и результаты:**
-
-| Название теста | Эндпоинт | Что проверяется | Результат |
-|---|---|---|---|
-| `TestGetAllTariffs_ReturnsListWithStatus200` | `GET /api/tariffs` | Публичный эндпоинт возвращает HTTP 200 и JSON-массив тарифов | ✅ PASS |
-| `TestGetAllTariffs_ServiceError_Returns500` | `GET /api/tariffs` | При ошибке сервиса хендлер возвращает HTTP 500 | ✅ PASS |
-| `TestRegisterUser_ValidBody_Returns201` | `POST /api/users/register` | Корректное тело запроса → HTTP 201, заголовок `Content-Type: application/json` | ✅ PASS |
-| `TestLogin_ValidCredentials_SetsAuthCookie` | `POST /api/users/login` | Успешный логин устанавливает HttpOnly-куку `auth_token` с JWT | ✅ PASS |
-| `TestGetAvailability_WithValidToken_ReturnsUnavailableIDs` | `GET /api/reservations/availability` | С валидным JWT в cookie защищённый эндпоинт возвращает HTTP 200 и массив ID занятых мест | ✅ PASS |
-
-**Вывод консоли:**
-```
-=== RUN   TestGetAllTariffs_ReturnsListWithStatus200
---- PASS: TestGetAllTariffs_ReturnsListWithStatus200 (0.00s)
-=== RUN   TestGetAllTariffs_ServiceError_Returns500
---- PASS: TestGetAllTariffs_ServiceError_Returns500 (0.00s)
-=== RUN   TestRegisterUser_ValidBody_Returns201
---- PASS: TestRegisterUser_ValidBody_Returns201 (0.00s)
-=== RUN   TestLogin_ValidCredentials_SetsAuthCookie
---- PASS: TestLogin_ValidCredentials_SetsAuthCookie (0.00s)
-=== RUN   TestGetAvailability_WithValidToken_ReturnsUnavailableIDs
---- PASS: TestGetAvailability_WithValidToken_ReturnsUnavailableIDs (0.00s)
-PASS
-ok      csbs/backend/internal/api/handlers      0.609s
-```
-
----
-
-#### 5.7.3. Автотесты по сборке (Playwright — production build)
-
-**Расположение:** `CSBS-FRONTEND/e2e/build-smoke.spec.js`
-
-**Подход:** Playwright собирает production-артефакт (`vite build`) и запускает его через `vite preview` на порту 4173. Тесты проверяют, что **production-сборка** (не dev-сервер) корректно работает в реальном браузере: страницы отдаются с HTTP 200, React монтируется, клиентский роутинг функционирует, интерактивные элементы реагируют. Реальные API-запросы к бэкенду не выполняются — тесты изолированы на уровне фронтенда.
-
-**Команда запуска:**
-```bash
-cd CSBS-FRONTEND
-npm run test:build
-# или: npx playwright test --project=build
-```
-
-**Тесты и результаты:**
-
-| Название теста | Что проверяется | Время | Результат |
-|---|---|---|---|
-| `BUILD: главная страница возвращает 200 и содержит навбар` | HTTP 200, `nav.navbar` и `.brand-name` видны в DOM | 2.0 s | ✅ PASS |
-| `BUILD: страница /booking загружается и рендерит заголовок` | URL `/booking`, тег `h1` содержит «Бронирование» | 0.9 s | ✅ PASS |
-| `BUILD: страница /ai-assistant загружается и рендерит чат-интерфейс` | URL `/ai-assistant`, `.chat-header h2` содержит «ИИ-Ассистент», `.chat-container` виден | 0.9 s | ✅ PASS |
-| `BUILD: навигация Главная → Бронирование → ИИ работает на клиенте` | Клиентский React Router: переход по навбару без перезагрузки страницы, UI монтируется | 1.1 s | ✅ PASS |
-| `BUILD: кнопка «Вход/Регистрация» открывает модальное окно авторизации` | Клик по кнопке → `.auth-modal-overlay` получает класс `open`, поля `#input_f2` и `#input_f4` видны | 1.6 s | ✅ PASS |
-
-**Вывод консоли:**
-```
-Running 5 tests using 1 worker
-
-  ✓  1 [build] › BUILD: главная страница возвращает 200 и содержит навбар (2.0s)
-  ✓  2 [build] › BUILD: страница /booking загружается и рендерит заголовок (0.9s)
-  ✓  3 [build] › BUILD: страница /ai-assistant загружается и рендерит чат-интерфейс (0.9s)
-  ✓  4 [build] › BUILD: навигация Главная → Бронирование → ИИ работает на клиенте (1.1s)
-  ✓  5 [build] › BUILD: кнопка «Вход/Регистрация» открывает модальное окно авторизации (1.6s)
-
-  5 passed (9.2s)
-```
-
----
-
-#### 5.7.4. Сквозные E2E-тесты (полный стек)
-
-**Расположение:** `CSBS-FRONTEND/e2e/e2e-full.spec.js`
-
-**Подход:** тесты запускаются без каких-либо моков — реальный браузер взаимодействует с реальным Go-бэкендом и PostgreSQL. Перед каждым тестом через `page.request.post()` создаётся уникальный тестовый пользователь (email с timestamp), исключая коллизии в БД между запусками. JWT выдаётся настоящим бэкендом и хранится в HttpOnly-куке.
-
-**Предварительное условие:**
-```bash
-docker compose --env-file backend/.env up -d   # поднять postgres + backend + frontend
-```
-
-**Команда запуска:**
-```bash
-cd CSBS-FRONTEND
-npm run test:e2e
-# или: npx playwright test e2e/e2e-full.spec.js
-```
-
-**Тесты и результаты:**
-
-| Название теста | Покрываемый бизнес-сценарий | Проверяемые эндпоинты | Результат |
-|---|---|---|---|
-| `E2E: регистрация нового пользователя и выход из системы` | Создание аккаунта → авто-вход → выход; проверка флага сессии в localStorage | `POST /api/users/register`, `POST /api/users/login`, `POST /api/users/logout` | ✅ PASS |
-| `E2E: вход, создание брони и её отображение в профиле` | Полный путь клиента: логин → страница бронирования → выбор места → создание брони → проверка в профиле | `POST /api/users/login`, `POST /api/reservations`, `GET /api/reservations` | ✅ PASS |
-| `E2E: ИИ-ассистент принимает сообщение и возвращает ответ от Gemini` | Авторизованный пользователь отправляет вопрос в чат; реальный Go-бэкенд проксирует запрос в Gemini API; ответ появляется в UI | `POST /api/chat` | ✅ PASS |
-
----
-
-#### 5.7.5. Сводная таблица автоматизированных тестов
-
-| Набор | Тестов | Пройдено | Провалено | Время выполнения |
-|---|---|---|---|---|
-| Unit (Go, `handlers_test.go`) | 5 | **5** | 0 | 0.6 с |
-| Автотесты по сборке (Playwright, `build-smoke.spec.js`) | 5 | **5** | 0 | 9.2 с |
-| E2E полный стек (Playwright, `e2e-full.spec.js`) | 3 | **3** | 0 | ~45 с |
-| **Итого** | **13** | **13** | **0** | |
-
-**Общий pass rate автоматизированных тестов: 100% (13/13)**
-
+<sub>Pet-проект. Демонстрирует полный цикл: слоистый Go-бэкенд, React-фронтенд, событийную архитектуру на Kafka, интеграцию ML + LLM и контейнеризацию.</sub>

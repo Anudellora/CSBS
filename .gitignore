@@ -37,6 +37,10 @@ pnpm-debug.log*
 # Database backups (генерируются сервисом postgres-backup в docker-compose)
 backups/
 
+# License private key (приватный ключ вендора — НИКОГДА не коммитить)
+license_private_key*
+*.license.key
+
 # Claude Code
 .claude/
 README1.md

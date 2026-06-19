@@ -214,10 +214,12 @@ export default function AiChat() {
             setMessages(msgs => [...msgs, aiMessage]);
         } catch (error) {
             console.error(error);
-            setMessages(msgs => [...msgs, {
-                role: 'ai',
-                content: 'Ошибка соединения с сервером.'
-            }]);
+            // 402 → функция AI-чата недоступна по текущей лицензии: показываем
+            // понятную причину с сервера вместо общей ошибки соединения.
+            const content = error.status === 402
+                ? (error.message || 'AI-чат недоступен в вашей лицензии.')
+                : 'Ошибка соединения с сервером.';
+            setMessages(msgs => [...msgs, { role: 'ai', content }]);
         } finally {
             setIsLoading(false);
         }

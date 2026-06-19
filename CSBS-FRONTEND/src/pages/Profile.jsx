@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     User, Calendar, Settings, Users, ShieldAlert,
-    CreditCard, Building2, Terminal, Trash2, FileText, QrCode, BarChart3
+    CreditCard, Building2, Terminal, Trash2, FileText, QrCode, BarChart3, KeyRound
 } from 'lucide-react';
 import { maskEmail, maskPhone } from '../utils/formatters';
 import { Navigate, useNavigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ import ClientsList from '../components/profile/ClientsList';
 import AdminsManagement from '../components/profile/AdminsManagement';
 import GlobalSettings from '../components/profile/GlobalSettings';
 import SystemAuditLogs from '../components/profile/SystemAuditLogs';
+import LicenseManagement from '../components/profile/LicenseManagement';
 
 /* ── helpers ── */
 
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
     // Sysadmin section
     { id: '_sys_divider', divider: true, label: 'Система', minRole: 2 },
     { id: 'staff',          label: 'Управление персоналом',  icon: ShieldAlert, minRole: 2 },
+    { id: 'license',        label: 'Лицензия',               icon: KeyRound,    minRole: 2 },
     { id: 'global-settings',label: 'Глобальные настройки',   icon: Settings,    minRole: 2 },
     { id: 'system-logs',    label: 'Системные логи',         icon: Terminal,    minRole: 2 },
 ];
@@ -213,6 +215,7 @@ export default function Profile() {
             case 'tariffs':        return <TariffsManagement />;
             case 'clients':        return <ClientsList />;
             case 'staff':          return <AdminsManagement />;
+            case 'license':        return <LicenseManagement />;
             case 'global-settings':return <GlobalSettings />;
             case 'system-logs':    return <SystemAuditLogs />;
             default:               return renderProfileTab();

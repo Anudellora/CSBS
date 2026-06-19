@@ -114,7 +114,15 @@ export const apiService = {
                 authService.logout();
             }
             const errorText = await res.text();
-            throw new Error(errorText || 'API Request Failed');
+            // Часть ручек (лицензия и др.) отдаёт ошибку как JSON {"error": "..."}.
+            let message = errorText;
+            try {
+                const parsed = JSON.parse(errorText);
+                if (parsed && parsed.error) message = parsed.error;
+            } catch { /* не JSON — оставляем текст как есть */ }
+            const err = new Error(message || 'API Request Failed');
+            err.status = res.status; // 402 → функция недоступна по лицензии
+            throw err;
         }
         // 204 No Content or empty body — return null
         if (res.status === 204) return null;
@@ -182,6 +190,14 @@ export const apiService = {
     // ── Analytics ──
     async getAnalyticsDashboard() {
         return this.fetchWithAuth('/analytics/dashboard');
+    },
+
+    // ── License ──
+    async getLicense() {
+        return this.fetchWithAuth('/license');
+    },
+    async installLicense(token) {
+        return this.fetchWithAuth('/license', { method: 'POST', body: JSON.stringify({ token }) });
     },
 
     // ── Admin: Users ──

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"csbs/backend/internal/api/handlers"
 	"csbs/backend/internal/config"
 	"csbs/backend/internal/models"
@@ -11,6 +12,7 @@ import (
 	"csbs/backend/pkg/gemini"
 	"csbs/backend/pkg/gigachat"
 	csbskafka "csbs/backend/pkg/kafka"
+	"csbs/backend/pkg/license"
 	"csbs/backend/pkg/logger"
 	"fmt"
 	"log"
@@ -58,6 +60,7 @@ func main() {
 		&models.Role{},
 		&models.Reservation{},
 		&models.AuditLog{},
+		&models.License{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
@@ -75,6 +78,18 @@ func main() {
 	tariffRepo := repository.NewTariffRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 	amenityRepo := repository.NewAmenityRepository(db)
+	licenseRepo := repository.NewLicenseRepository(db)
+
+	// Лицензирование: менеджер проверяет токены публичным ключом Ed25519.
+	// Пустой/битый ключ → менеджер без ключа, платные функции просто закрыты.
+	var licensePubKey ed25519.PublicKey
+	if cfg.LicensePublicKey != "" {
+		licensePubKey, err = license.ParsePublicKey(cfg.LicensePublicKey)
+		if err != nil {
+			log.Printf("Лицензирование: некорректный LICENSE_PUBLIC_KEY: %v", err)
+		}
+	}
+	licenseManager := license.NewManager(licensePubKey)
 
 	// Поднимаю сервисы (тут вся главная бизнес-логика)
 	locationService := service.NewLocationService(locationRepo)
@@ -125,6 +140,10 @@ func main() {
 	analyticsService := service.NewAnalyticsService(reservationRepo, workspaceRepo, predictionService)
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
 
+	// Лицензия: загружаем действующую (БД → .env) и поднимаем хендлер админки.
+	licenseService := service.NewLicenseService(licenseManager, licenseRepo, cfg.LicenseKey)
+	licenseHandler := handlers.NewLicenseHandler(licenseService)
+
 	// Фоновый сервис: шлёт письма-напоминания о бронях за 24ч и за 3ч до начала.
 	reminderService := service.NewReminderService(reservationRepo, emailSender, time.Minute)
 	reminderService.Start(context.Background())
@@ -156,8 +175,11 @@ func main() {
 		r.Mount("/admin", adminHandler.Routes())
 		r.Mount("/auditlogs", auditLogHandler.Routes())
 		r.Mount("/predictions", predictionHandler.Routes())
-		r.Mount("/chat", chatHandler.Routes())
-		r.Mount("/analytics", analyticsHandler.Routes())
+		// Платные функции закрыты лицензионным gate: при отсутствии фичи
+		// в лицензии (или просроченной лицензии) middleware вернёт 402.
+		r.Mount("/chat", licenseManager.RequireFeature("ai_chat")(chatHandler.Routes()))
+		r.Mount("/analytics", licenseManager.RequireFeature("analytics")(analyticsHandler.Routes()))
+		r.Mount("/license", licenseHandler.Routes())
 	})
 
 	// Заполняю базу дефолтными данными
