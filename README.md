@@ -145,5 +145,3 @@ CSBS/
 | ![Дашборд аналитики](docs/screenshots/dashboard.png) | ![ИИ-ассистент](docs/screenshots/ai-chat.png) |
 
 ---
-
-<sub>Pet-проект. Демонстрирует полный цикл: слоистый Go-бэкенд, React-фронтенд, событийную архитектуру на Kafka, интеграцию ML + LLM и контейнеризацию.</sub>
